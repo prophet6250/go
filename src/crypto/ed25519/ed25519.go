@@ -213,7 +213,7 @@ func Sign(privateKey PrivateKey, message []byte) []byte {
 	return signature
 }
 
-func sign(signature []byte, privateKey PrivateKey, message []byte) {
+func signGeneric(signature, privateKey, message []byte) {
 	k, err := privateKeyCache.Get(&privateKey[0], func() (*ed25519.PrivateKey, error) {
 		return ed25519.NewPrivateKey(privateKey)
 	}, func(k *ed25519.PrivateKey) bool {
@@ -267,4 +267,8 @@ func VerifyWithOptions(publicKey PublicKey, message, sig []byte, opts *Options) 
 	default:
 		return errors.New("ed25519: expected opts.Hash zero (unhashed message, for standard Ed25519) or SHA-512 (for Ed25519ph)")
 	}
+}
+
+func verifyGeneric(publicKey PublicKey, message, sig []byte) bool {
+	return Verify(publicKey, message, sig)
 }
