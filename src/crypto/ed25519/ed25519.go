@@ -117,7 +117,10 @@ func (priv PrivateKey) Sign(rand io.Reader, message []byte, opts crypto.SignerOp
 		}
 		return ed25519.SignCtx(k, message, context)
 	case hash == crypto.Hash(0): // Ed25519
-		return ed25519.Sign(k, message), nil
+		//return ed25519.Sign(k, message), nil
+		sig := make([]byte, SignatureSize)
+		sign(sig, priv, message)
+		return sig, nil
 	default:
 		return nil, errors.New("ed25519: expected opts.HashFunc() zero (unhashed message, for standard Ed25519) or SHA-512 (for Ed25519ph)")
 	}
