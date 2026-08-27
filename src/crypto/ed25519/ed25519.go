@@ -266,12 +266,21 @@ func VerifyWithOptions(publicKey PublicKey, message, sig []byte, opts *Options) 
 		}
 		return ed25519.VerifyCtx(k, message, sig, opts.Context)
 	case opts.Hash == crypto.Hash(0): // Ed25519
-		return ed25519.Verify(k, message, sig)
+		if !verify(publicKey, message, sig) {
+			return errors.New("ed25519: invalid signature")
+		}
+		return nil
 	default:
 		return errors.New("ed25519: expected opts.Hash zero (unhashed message, for standard Ed25519) or SHA-512 (for Ed25519ph)")
 	}
 }
 
 func verifyGeneric(publicKey PublicKey, message, sig []byte) bool {
-	return Verify(publicKey, message, sig)
+	k, err := ed25519.NewPublicKey(publicKey)
+
+	if err != nil {
+		return false
+	}
+
+	return ed25519.Verify(k, message, sig) == nil
 }
