@@ -115,11 +115,15 @@ verifyLoopCC:
 	BVS  verifyLoopCC       // CC=3: hardware-interrupted, retry
 
 	// Capture CC into R8 using IPM (Insert Program Mask).
-	// IPM stores the CC in bits 34-35 of R8 (i.e. bits 2-3 of byte 1).
-	// CC value = (R8 >> 28) & 3
-	IPM  R8
-	SRL  R8, $28
-	AND  $3, R8
+	// IPM loads bits 32-63 of R8 with the PSW program mask and CC.
+	// The CC occupies bits 34-35 of the 64-bit register, i.e. bits 2-3
+	// of the 32-bit low word.  A logical right shift of 28 on the 32-bit
+	// low word moves those two bits into positions 0-1, giving CC in 0..3.
+	// SRW is "Shift Right single Word" (logical, 32-bit): SRW $n, Rsrc, Rdst.
+	// AND with $3 masks to the low two bits.
+	IPM R8
+	SRW $28, R8, R8
+	AND $3, R8
 
 	MOVB R8, ret+72(FP)
 	RET
