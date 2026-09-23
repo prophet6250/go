@@ -9,10 +9,32 @@ import (
 	"crypto/internal/cryptotest"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
+
+// ccDescription maps raw KDSA condition codes to human-readable labels.
+// cc=255 is a sentinel used by verifyWithCC to indicate the signature was
+// rejected by the Go pre-check before KDSA was ever invoked.
+func ccDescription(cc uint8) string {
+	switch cc {
+	case 0:
+		return "CC=0 (valid)"
+	case 1:
+		return "CC=1 (public key invalid: not decompressable, Y >= prime, or not on curve)"
+	case 2:
+		return "CC=2 (signature invalid: R/S out of range, or signature mismatch)"
+	case 3:
+		return "CC=3 (partial completion — should not appear, retry loop handles this)"
+	case 255:
+		return "CC=n/a (rejected by Go pre-check: bad sig length or high-bits set)"
+	default:
+		return fmt.Sprintf("CC=%d (unknown)", cc)
+	}
+}
 
 // TestEd25519Vectors runs a very large set of test vectors that exercise all
 // combinations of low-order points, low-order components, and non-canonical
@@ -37,6 +59,9 @@ func TestEd25519Vectors(t *testing.T) {
 	if err := json.Unmarshal(jsonVectors, &vectors); err != nil {
 		t.Fatal(err)
 	}
+
+	isS390X := runtime.GOARCH == "s390x"
+
 	for i, v := range vectors {
 		expectedToVerify := true
 		for _, f := range v.Flags {
@@ -60,12 +85,29 @@ func TestEd25519Vectors(t *testing.T) {
 		signature := append(decodeHex(t, v.R), decodeHex(t, v.S)...)
 		message := []byte(v.M)
 
-		didVerify := ed25519.Verify(publicKey, message, signature)
+		// verifyWithCC calls the KDSA instruction directly on s390x and
+		// returns the raw condition code for diagnostic purposes.
+		// On all other architectures it delegates to the generic implementation
+		// and returns cc=0.
+		didVerify, cc := ed25519.VerifyWithCC(publicKey, message, signature)
+
+		if isS390X {
+			// On s390x, log every vector so we can see the CC distribution.
+			// Suppress the per-vector log in normal runs; surface it only on
+			// mismatch or via -v so the output stays manageable.
+			if didVerify != expectedToVerify || testing.Verbose() {
+				t.Logf("[%d] flags=%-20v pubkey=%.16s… expected=%v got=%v %s",
+					i, v.Flags, v.A, expectedToVerify, didVerify, ccDescription(cc))
+			}
+		}
+
 		if didVerify && !expectedToVerify {
-			t.Errorf("#%d: vector with flags %s unexpectedly verified", i, v.Flags)
+			t.Errorf("[%d] flags=%v: unexpectedly verified  pubkey=%s sig=%.64s… message=%q  %s",
+				i, v.Flags, v.A, hex.EncodeToString(signature), v.M, ccDescription(cc))
 		}
 		if !didVerify && expectedToVerify {
-			t.Errorf("#%d: vector with flags %s unexpectedly rejected", i, v.Flags)
+			t.Errorf("[%d] flags=%v: unexpectedly rejected  pubkey=%s sig=%.64s… message=%q  %s",
+				i, v.Flags, v.A, hex.EncodeToString(signature), v.M, ccDescription(cc))
 		}
 	}
 }

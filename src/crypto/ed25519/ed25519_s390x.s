@@ -83,6 +83,50 @@ error:
 panic:
 	UNDEF
 
+// func kdsaVerifyCC(message, signature, publicKey []byte) uint8
+// Like kdsaVerify but returns the raw hardware condition code (0, 1, or 2)
+// instead of a boolean, for diagnostic/instrumentation purposes only.
+TEXT ·kdsaVerifyCC(SB), $4096-73
+	// Setup is identical to kdsaVerify.
+	MOVD $buffer-4096(SP), R1
+
+	MOVD R1, R2
+	MOVD $(4096/256), R0
+
+clearCC:
+	XC    $256, (R2), (R2)
+	MOVD  $256(R2), R2
+	BRCTG R0, clearCC
+
+	MOVD $32, R0
+	LMG  message+0(FP), R2, R3
+	LMG  signature+24(FP), R4, R5
+	LMG  publicKey+48(FP), R6, R7
+
+	CMPBNE R5, $64, panicCC
+	CMPBNE R7, $32, panicCC
+
+	MVCIN $32, 31(R4), (R1)
+	MVCIN $32, 63(R4), 32(R1)
+	MVCIN $32, 31(R6), 64(R1)
+
+verifyLoopCC:
+	WORD $0xB93A0002        // KDSA instruction
+	BVS  verifyLoopCC       // CC=3: hardware-interrupted, retry
+
+	// Capture CC into R8 using IPM (Insert Program Mask).
+	// IPM stores the CC in bits 34-35 of R8 (i.e. bits 2-3 of byte 1).
+	// CC value = (R8 >> 28) & 3
+	IPM  R8
+	SRL  R8, $28
+	AND  $3, R8
+
+	MOVB R8, ret+72(FP)
+	RET
+
+panicCC:
+	UNDEF
+
 // func kdsaVerify(message, signature, publicKey []byte) bool
 TEXT ·kdsaVerify(SB), $4096-73
 	// The kdsa instruction takes function code,
