@@ -13,9 +13,3 @@ func sign(signature, privateKey, message []byte) {
 func verify(publicKey PublicKey, message, sig []byte) bool {
 	return verifyGeneric(publicKey, message, sig)
 }
-
-// verifyWithCC is the non-s390x stub. It delegates to verifyGeneric and
-// always returns cc=0 because there is no KDSA instruction to interrogate.
-func verifyWithCC(publicKey PublicKey, message, sig []byte) (bool, uint8) {
-	return verifyGeneric(publicKey, message, sig), 0
-}
