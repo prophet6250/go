@@ -310,6 +310,15 @@ func (x Int8s) Or(y Int8s) Int8s {
 	return Int8s{a: x.a | y.a, b: x.b | y.b}
 }
 
+// ReduceSum returns the scalar sum of the elements of x.
+func (x Int8s) ReduceSum() int8 {
+	var res int8
+	for i := 0; i < 16; i++ {
+		res += x.get(i)
+	}
+	return res
+}
+
 // Store stores the vector elements into the slice s.
 func (x Int8s) Store(s []int8) {
 	for i := 0; i < 16 && i < len(s); i++ {
@@ -625,7 +634,7 @@ func (x Int16s) Or(y Int16s) Int16s {
 }
 
 // ShiftAllLeft shifts all elements left by y bits.
-func (x Int16s) ShiftAllLeft(y uint8) Int16s {
+func (x Int16s) ShiftAllLeft(y uint64) Int16s {
 	var res Int16s
 	for i := 0; i < 8; i++ {
 		res.set(i, x.get(i)<<y)
@@ -634,7 +643,7 @@ func (x Int16s) ShiftAllLeft(y uint8) Int16s {
 }
 
 // ShiftAllRight shifts all elements right by y bits.
-func (x Int16s) ShiftAllRight(y uint8) Int16s {
+func (x Int16s) ShiftAllRight(y uint64) Int16s {
 	var res Int16s
 	for i := 0; i < 8; i++ {
 		res.set(i, x.get(i)>>y)
@@ -662,6 +671,15 @@ func (x Int16s) RotateAllRight(dist uint64) Int16s {
 		u := uint16(x.get(i))
 		r := (u >> d) | (u << ((16 - d) & 15))
 		res.set(i, int16(r))
+	}
+	return res
+}
+
+// ReduceSum returns the scalar sum of the elements of x.
+func (x Int16s) ReduceSum() int16 {
+	var res int16
+	for i := 0; i < 8; i++ {
+		res += x.get(i)
 	}
 	return res
 }
@@ -781,10 +799,10 @@ func (x Int32s) get(i int) int32 {
 func (x *Int32s) set(i int, v int32) {
 	val := uint64(uint32(v))
 	if i < 2 {
-		mask := uint64(0xffffffff) << (32 * i)
+		mask := uint64(0xffff_ffff) << (32 * i)
 		x.a = (x.a &^ mask) | (val << (32 * i))
 	} else {
-		mask := uint64(0xffffffff) << (32 * (i - 2))
+		mask := uint64(0xffff_ffff) << (32 * (i - 2))
 		x.b = (x.b &^ mask) | (val << (32 * (i - 2)))
 	}
 }
@@ -974,7 +992,7 @@ func (x Int32s) Or(y Int32s) Int32s {
 }
 
 // ShiftAllLeft shifts all elements left by y bits.
-func (x Int32s) ShiftAllLeft(y uint8) Int32s {
+func (x Int32s) ShiftAllLeft(y uint64) Int32s {
 	var res Int32s
 	for i := 0; i < 4; i++ {
 		res.set(i, x.get(i)<<y)
@@ -983,7 +1001,7 @@ func (x Int32s) ShiftAllLeft(y uint8) Int32s {
 }
 
 // ShiftAllRight shifts all elements right by y bits.
-func (x Int32s) ShiftAllRight(y uint8) Int32s {
+func (x Int32s) ShiftAllRight(y uint64) Int32s {
 	var res Int32s
 	for i := 0; i < 4; i++ {
 		res.set(i, x.get(i)>>y)
@@ -1011,6 +1029,15 @@ func (x Int32s) RotateAllRight(dist uint64) Int32s {
 		u := uint32(x.get(i))
 		r := (u >> d) | (u << ((32 - d) & 31))
 		res.set(i, int32(r))
+	}
+	return res
+}
+
+// ReduceSum returns the scalar sum of the elements of x.
+func (x Int32s) ReduceSum() int32 {
+	var res int32
+	for i := 0; i < 4; i++ {
+		res += x.get(i)
 	}
 	return res
 }
@@ -1228,7 +1255,7 @@ func (x Int64s) Or(y Int64s) Int64s {
 }
 
 // ShiftAllLeft shifts all elements left by y bits.
-func (x Int64s) ShiftAllLeft(y uint8) Int64s {
+func (x Int64s) ShiftAllLeft(y uint64) Int64s {
 	return Int64s{a: x.a << y, b: x.b << y}
 }
 
@@ -1482,6 +1509,15 @@ func (x Uint8s) Not() Uint8s {
 // Or returns the bitwise OR of x and y.
 func (x Uint8s) Or(y Uint8s) Uint8s {
 	return Uint8s{a: x.a | y.a, b: x.b | y.b}
+}
+
+// ReduceSum returns the scalar sum of the elements of x.
+func (x Uint8s) ReduceSum() uint8 {
+	var res uint8
+	for i := 0; i < 16; i++ {
+		res += x.get(i)
+	}
+	return res
 }
 
 // Store stores the vector elements into the slice s.
@@ -1786,7 +1822,7 @@ func (x Uint16s) Or(y Uint16s) Uint16s {
 }
 
 // ShiftAllLeft shifts all elements left by y bits.
-func (x Uint16s) ShiftAllLeft(y uint8) Uint16s {
+func (x Uint16s) ShiftAllLeft(y uint64) Uint16s {
 	var res Uint16s
 	for i := 0; i < 8; i++ {
 		res.set(i, x.get(i)<<y)
@@ -1795,7 +1831,7 @@ func (x Uint16s) ShiftAllLeft(y uint8) Uint16s {
 }
 
 // ShiftAllRight shifts all elements right by y bits.
-func (x Uint16s) ShiftAllRight(y uint8) Uint16s {
+func (x Uint16s) ShiftAllRight(y uint64) Uint16s {
 	var res Uint16s
 	for i := 0; i < 8; i++ {
 		res.set(i, x.get(i)>>y)
@@ -1823,6 +1859,15 @@ func (x Uint16s) RotateAllRight(dist uint64) Uint16s {
 		u := x.get(i)
 		r := (u >> d) | (u << ((16 - d) & 15))
 		res.set(i, r)
+	}
+	return res
+}
+
+// ReduceSum returns the scalar sum of the elements of x.
+func (x Uint16s) ReduceSum() uint16 {
+	var res uint16
+	for i := 0; i < 8; i++ {
+		res += x.get(i)
 	}
 	return res
 }
@@ -1945,10 +1990,10 @@ func (x Uint32s) get(i int) uint32 {
 func (x *Uint32s) set(i int, v uint32) {
 	val := uint64(v)
 	if i < 2 {
-		mask := uint64(0xffffffff) << (32 * i)
+		mask := uint64(0xffff_ffff) << (32 * i)
 		x.a = (x.a &^ mask) | (val << (32 * i))
 	} else {
-		mask := uint64(0xffffffff) << (32 * (i - 2))
+		mask := uint64(0xffff_ffff) << (32 * (i - 2))
 		x.b = (x.b &^ mask) | (val << (32 * (i - 2)))
 	}
 }
@@ -2106,7 +2151,7 @@ func (x Uint32s) Or(y Uint32s) Uint32s {
 }
 
 // ShiftAllLeft shifts all elements left by y bits.
-func (x Uint32s) ShiftAllLeft(y uint8) Uint32s {
+func (x Uint32s) ShiftAllLeft(y uint64) Uint32s {
 	var res Uint32s
 	for i := 0; i < 4; i++ {
 		res.set(i, x.get(i)<<y)
@@ -2115,7 +2160,7 @@ func (x Uint32s) ShiftAllLeft(y uint8) Uint32s {
 }
 
 // ShiftAllRight shifts all elements right by y bits.
-func (x Uint32s) ShiftAllRight(y uint8) Uint32s {
+func (x Uint32s) ShiftAllRight(y uint64) Uint32s {
 	var res Uint32s
 	for i := 0; i < 4; i++ {
 		res.set(i, x.get(i)>>y)
@@ -2143,6 +2188,15 @@ func (x Uint32s) RotateAllRight(dist uint64) Uint32s {
 		u := x.get(i)
 		r := (u >> d) | (u << ((32 - d) & 31))
 		res.set(i, r)
+	}
+	return res
+}
+
+// ReduceSum returns the scalar sum of the elements of x.
+func (x Uint32s) ReduceSum() uint32 {
+	var res uint32
+	for i := 0; i < 4; i++ {
+		res += x.get(i)
 	}
 	return res
 }
@@ -2361,12 +2415,12 @@ func (x Uint64s) Or(y Uint64s) Uint64s {
 }
 
 // ShiftAllLeft shifts all elements left by y bits.
-func (x Uint64s) ShiftAllLeft(y uint8) Uint64s {
+func (x Uint64s) ShiftAllLeft(y uint64) Uint64s {
 	return Uint64s{a: x.a << y, b: x.b << y}
 }
 
 // ShiftAllRight shifts all elements right by y bits.
-func (x Uint64s) ShiftAllRight(y uint8) Uint64s {
+func (x Uint64s) ShiftAllRight(y uint64) Uint64s {
 	return Uint64s{a: x.a >> y, b: x.b >> y}
 }
 
@@ -2491,10 +2545,10 @@ func (x Float32s) get(i int) float32 {
 func (x *Float32s) set(i int, v float32) {
 	val := uint64(math.Float32bits(v))
 	if i < 2 {
-		mask := uint64(0xffffffff) << (32 * i)
+		mask := uint64(0xffff_ffff) << (32 * i)
 		x.a = (x.a &^ mask) | (val << (32 * i))
 	} else {
-		mask := uint64(0xffffffff) << (32 * (i - 2))
+		mask := uint64(0xffff_ffff) << (32 * (i - 2))
 		x.b = (x.b &^ mask) | (val << (32 * (i - 2)))
 	}
 }
@@ -2504,11 +2558,8 @@ func (x Float32s) Abs() Float32s {
 	var res Float32s
 	for i := 0; i < 4; i++ {
 		v := x.get(i)
-		if v < 0 {
-			res.set(i, -v)
-		} else {
-			res.set(i, v)
-		}
+		v = float32(math.Abs(float64(v)))
+		res.set(i, v)
 	}
 	return res
 }
@@ -2612,11 +2663,7 @@ func (x Float32s) Max(y Float32s) Float32s {
 	for i := 0; i < 4; i++ {
 		vx := x.get(i)
 		vy := y.get(i)
-		if vx > vy {
-			res.set(i, vx)
-		} else {
-			res.set(i, vy)
-		}
+		res.set(i, max(vx, vy))
 	}
 	return res
 }
@@ -2629,17 +2676,13 @@ func (x Float32s) IfElse(mask Mask32s, y Float32s) Float32s {
 	}
 }
 
-// Min returns the element-wise minimum of x and y.
+// Min returns the element-wise maximum of x and y.
 func (x Float32s) Min(y Float32s) Float32s {
 	var res Float32s
 	for i := 0; i < 4; i++ {
 		vx := x.get(i)
 		vy := y.get(i)
-		if vx < vy {
-			res.set(i, vx)
-		} else {
-			res.set(i, vy)
-		}
+		res.set(i, min(vx, vy))
 	}
 	return res
 }
@@ -2683,6 +2726,13 @@ func (x Float32s) NotEqual(y Float32s) Mask32s {
 		}
 	}
 	return res
+}
+
+// ReduceSum returns the scalar sum of the elements of x.
+func (x Float32s) ReduceSum() float32 {
+	// Evaluate with same associativity as the horizontal-add idiom.
+	// It's also perhaps faster, since a shorter expression tree.
+	return (x.get(0) + x.get(1)) + (x.get(2) + x.get(3))
 }
 
 // Sqrt returns the element-wise square root of x.
@@ -2771,11 +2821,8 @@ func (x Float64s) Abs() Float64s {
 	var res Float64s
 	for i := 0; i < 4; i++ {
 		v := x.get(i)
-		if v < 0 {
-			res.set(i, -v)
-		} else {
-			res.set(i, v)
-		}
+		v = math.Abs(v)
+		res.set(i, v)
 	}
 	return res
 }
@@ -2871,18 +2918,10 @@ func (x Float64s) Max(y Float64s) Float64s {
 	var res Float64s
 	vx := x.get(0)
 	vy := y.get(0)
-	if vx > vy {
-		res.set(0, vx)
-	} else {
-		res.set(0, vy)
-	}
+	res.set(0, max(vx, vy))
 	vx = x.get(1)
 	vy = y.get(1)
-	if vx > vy {
-		res.set(1, vx)
-	} else {
-		res.set(1, vy)
-	}
+	res.set(1, max(vx, vy))
 	return res
 }
 
@@ -2899,18 +2938,10 @@ func (x Float64s) Min(y Float64s) Float64s {
 	var res Float64s
 	vx := x.get(0)
 	vy := y.get(0)
-	if vx < vy {
-		res.set(0, vx)
-	} else {
-		res.set(0, vy)
-	}
+	res.set(0, min(vx, vy))
 	vx = x.get(1)
 	vy = y.get(1)
-	if vx < vy {
-		res.set(1, vx)
-	} else {
-		res.set(1, vy)
-	}
+	res.set(1, min(vx, vy))
 	return res
 }
 
@@ -2947,6 +2978,15 @@ func (x Float64s) NotEqual(y Float64s) Mask64s {
 	}
 	if x.get(1) != y.get(1) {
 		res.b = ^uint64(0)
+	}
+	return res
+}
+
+// ReduceSum returns the scalar sum of the elements of x.
+func (x Float64s) ReduceSum() float64 {
+	var res float64
+	for i := 0; i < 2; i++ {
+		res += x.get(i)
 	}
 	return res
 }
@@ -3064,10 +3104,10 @@ func (x Mask16s) ToInt16s() Int16s {
 func (x *Mask32s) set(i int, v bool) {
 	if v {
 		if i < 2 {
-			mask := uint64(0xffffffff) << (32 * i)
+			mask := uint64(0xffff_ffff) << (32 * i)
 			x.a |= mask
 		} else {
-			mask := uint64(0xffffffff) << (32 * (i - 2))
+			mask := uint64(0xffff_ffff) << (32 * (i - 2))
 			x.b |= mask
 		}
 	}
@@ -3205,6 +3245,40 @@ func (x Uint64s) CarrylessMultiplyOdd(y Uint64s) Uint64s {
 	return x.clmul(y)
 }
 
+func (v Int8s) OnesCount() Int8s {
+	a0, a1 := v.a, v.b
+	m1 := uint64(0x5555555555555555)
+	m2 := uint64(0x3333333333333333)
+	m4 := uint64(0x0f0f0f0f0f0f0f0f)
+	a0 = (a0 & m1) + ((a0 >> 1) & m1)
+	a1 = (a1 & m1) + ((a1 >> 1) & m1)
+
+	a0 = (a0 & m2) + ((a0 >> 2) & m2)
+	a1 = (a1 & m2) + ((a1 >> 2) & m2)
+
+	a0 = (a0 & m4) + ((a0 >> 4) & m4)
+	a1 = (a1 & m4) + ((a1 >> 4) & m4)
+
+	return Int8s{a: a0, b: a1}
+}
+
+func (v Uint8s) OnesCount() Uint8s {
+	a0, a1 := v.a, v.b
+	m1 := uint64(0x5555555555555555)
+	m2 := uint64(0x3333333333333333)
+	m4 := uint64(0x0f0f0f0f0f0f0f0f)
+	a0 = (a0 & m1) + ((a0 >> 1) & m1)
+	a1 = (a1 & m1) + ((a1 >> 1) & m1)
+
+	a0 = (a0 & m2) + ((a0 >> 2) & m2)
+	a1 = (a1 & m2) + ((a1 >> 2) & m2)
+
+	a0 = (a0 & m4) + ((a0 >> 4) & m4)
+	a1 = (a1 & m4) + ((a1 >> 4) & m4)
+
+	return Uint8s{a: a0, b: a1}
+}
+
 const (
 	by8  = 0x0101010101010101
 	by16 = 0x0001000100010001
@@ -3224,7 +3298,7 @@ func BroadcastInt16s(x int16) Int16s {
 
 // BroadcastInt32s fills the elements of a slice with its argument value.
 func BroadcastInt32s(x int32) Int32s {
-	v := uint64(x) & 0xffffffff
+	v := uint64(x) & 0xffff_ffff
 	v = v<<32 | v
 	return Int32s{a: v, b: v}
 }
@@ -3272,4 +3346,105 @@ func BroadcastFloat32s(x float32) Float32s {
 func BroadcastFloat64s(x float64) Float64s {
 	v := math.Float64bits(x)
 	return Float64s{a: v, b: v}
+}
+
+func (x Mask8s) All() bool {
+	return x.a&x.b == 0xffff_ffff_ffff_ffff
+}
+
+func (x Mask8s) Any() bool {
+	return x.a|x.b != 0
+}
+
+func (x Mask8s) None() bool {
+	return x.a|x.b == 0
+}
+
+func (x Mask16s) All() bool {
+	return x.a&x.b == 0xffff_ffff_ffff_ffff
+}
+
+func (x Mask16s) Any() bool {
+	return x.a|x.b != 0
+}
+
+func (x Mask16s) None() bool {
+	return x.a|x.b == 0
+}
+
+func (x Mask32s) All() bool {
+	return x.a&x.b == 0xffff_ffff_ffff_ffff
+}
+
+func (x Mask32s) Any() bool {
+	return x.a|x.b != 0
+}
+
+func (x Mask32s) None() bool {
+	return x.a|x.b == 0
+}
+
+func (x Mask64s) All() bool {
+	return x.a&x.b == 0xffff_ffff_ffff_ffff
+}
+
+func (x Mask64s) Any() bool {
+	return x.a|x.b != 0
+}
+
+func (x Mask64s) None() bool {
+	return x.a|x.b == 0
+}
+
+// TrailingZeros returns the number of trailing (low-order) zeroes in mask m
+func (m Mask8s) TrailingZeros() int {
+	a0 := m.a
+	a := a0 & 0x0101010101010101
+	lane := bits.TrailingZeros64(a)
+	if lane < 64 {
+		return lane >> 3
+	}
+	a0 = m.b
+	a = a0 & 0x0101010101010101
+	lane = bits.TrailingZeros64(a)
+	return lane>>3 + 8
+}
+
+// TrailingZeros returns the number of trailing (low-order) zeroes in mask m
+func (m Mask16s) TrailingZeros() int {
+	a0 := m.a
+	a := a0 & 0x0001000100010001
+	lane := bits.TrailingZeros64(a)
+	if lane < 64 {
+		return lane >> 4
+	}
+	a0 = m.b
+	a = a0 & 0x0001000100010001
+	lane = bits.TrailingZeros64(a)
+	return lane>>4 + 4
+}
+
+// TrailingZeros returns the number of trailing (low-order) zeroes in mask m
+func (m Mask32s) TrailingZeros() int {
+	a0 := m.a
+	a := a0 & 0x0000000100000001
+	lane := bits.TrailingZeros64(a)
+	if lane < 64 {
+		return lane >> 5
+	}
+	a0 = m.b
+	a = a0 & 0x0000000100000001
+	lane = bits.TrailingZeros64(a)
+	return lane>>5 + 2
+}
+
+// TrailingZeros returns the number of trailing (low-order) zeroes in mask m
+func (m Mask64s) TrailingZeros() int {
+	if m.a != 0 {
+		return 0
+	}
+	if m.b != 0 {
+		return 1
+	}
+	return 2
 }

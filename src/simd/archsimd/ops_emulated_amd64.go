@@ -203,3 +203,261 @@ func (x Uint8x64) Mul(y Uint8x64) Uint8x64 {
 	po := xo.Mul(yo).And(mask16).ShiftAllLeft(8)
 	return pe.Or(po).ReshapeToUint8s()
 }
+
+var popcnt4x16 = [16]int8{0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4}
+var popcnt4x32 = [32]int8{
+	0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
+	0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
+}
+
+// OnesCount counts the number of set bits in each element.
+//
+// Emulated, CPU Feature: AVX
+func (x Int8x16) OnesCount() Int8x16 {
+	if X86.AVX512BITALG() {
+		return x.onesCount()
+	}
+	lut := LoadInt8x16Array(&popcnt4x16)
+	mask0f := BroadcastInt8x16(0x0f)
+	lo := x.And(mask0f)
+	hi := x.ToBits().ReshapeToUint16s().ShiftAllRight(4).ReshapeToUint8s().BitsToInt8().And(mask0f)
+	return lut.PermuteOrZero(lo).Add(lut.PermuteOrZero(hi))
+}
+
+// OnesCount counts the number of set bits in each element.
+//
+// Emulated, CPU Feature: AVX
+func (x Uint8x16) OnesCount() Uint8x16 {
+	if X86.AVX512BITALG() {
+		return x.BitsToInt8().onesCount().ToBits()
+	}
+	lut := LoadInt8x16Array(&popcnt4x16).ToBits()
+	mask0f := BroadcastInt8x16(0x0f).ToBits()
+	lo := x.And(mask0f)
+	hi := x.ReshapeToUint16s().ShiftAllRight(4).ReshapeToUint8s().And(mask0f)
+	return lut.PermuteOrZero(lo.BitsToInt8()).Add(lut.PermuteOrZero(hi.BitsToInt8()))
+}
+
+// OnesCount counts the number of set bits in each element.
+//
+// Emulated, CPU Feature: AVX2
+func (x Int8x32) OnesCount() Int8x32 {
+	if X86.AVX512BITALG() {
+		return x.onesCount()
+	}
+	lut := LoadInt8x32Array(&popcnt4x32)
+	mask0f := BroadcastInt8x32(0x0f)
+	lo := x.And(mask0f)
+	hi := x.ToBits().ReshapeToUint16s().ShiftAllRight(4).ReshapeToUint8s().BitsToInt8().And(mask0f)
+	return lut.PermuteOrZeroGrouped(lo).Add(lut.PermuteOrZeroGrouped(hi))
+}
+
+// OnesCount counts the number of set bits in each element.
+//
+// Emulated, CPU Feature: AVX2
+func (x Uint8x32) OnesCount() Uint8x32 {
+	if X86.AVX512BITALG() {
+		return x.BitsToInt8().onesCount().ToBits()
+	}
+	lut := LoadInt8x32Array(&popcnt4x32).ToBits()
+	mask0f := BroadcastInt8x32(0x0f).ToBits()
+	lo := x.And(mask0f)
+	hi := x.ReshapeToUint16s().ShiftAllRight(4).ReshapeToUint8s().And(mask0f)
+	return lut.PermuteOrZeroGrouped(lo.BitsToInt8()).Add(lut.PermuteOrZeroGrouped(hi.BitsToInt8()))
+}
+
+// OnesCount counts the number of set bits in each element.
+//
+// Asm: VPOPCNTB, CPU Feature: AVX512BITALG
+func (x Int8x64) OnesCount() Int8x64 {
+	return x.onesCount()
+}
+
+// OnesCount counts the number of set bits in each element.
+//
+// Asm: VPOPCNTB, CPU Feature: AVX512BITALG
+func (x Uint8x64) OnesCount() Uint8x64 {
+	return x.onesCount()
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX
+func (x Float32x4) ReduceSum() float32 {
+	x = x.ConcatAddPairs(x) // [x0+x1, x2+x3, x0+x1, x2+x3]
+	x = x.ConcatAddPairs(x) // [(x0+x1)+(x2+x3), ...]
+	return x.GetElem(0)
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX
+func (x Float64x2) ReduceSum() float64 {
+	return x.ConcatAddPairs(x).GetElem(0) // [x0+x1, x0+x1]
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX
+func (x Float32x8) ReduceSum() float32 {
+	return x.GetLo().Add(x.GetHi()).ReduceSum()
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX
+func (x Float64x4) ReduceSum() float64 {
+	return x.GetLo().Add(x.GetHi()).ReduceSum()
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX512
+func (x Float32x16) ReduceSum() float32 {
+	return x.GetLo().Add(x.GetHi()).ReduceSum()
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX512
+func (x Float64x8) ReduceSum() float64 {
+	return x.GetLo().Add(x.GetHi()).ReduceSum()
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX
+func (x Int16x8) ReduceSum() int16 {
+	x = x.ConcatAddPairs(x)
+	x = x.ConcatAddPairs(x)
+	x = x.ConcatAddPairs(x)
+	return x.GetElem(0)
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX
+func (x Uint16x8) ReduceSum() uint16 {
+	x = x.ConcatAddPairs(x)
+	x = x.ConcatAddPairs(x)
+	x = x.ConcatAddPairs(x)
+	return x.GetElem(0)
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX
+func (x Int32x4) ReduceSum() int32 {
+	x = x.ConcatAddPairs(x)
+	x = x.ConcatAddPairs(x)
+	return x.GetElem(0)
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX
+func (x Uint32x4) ReduceSum() uint32 {
+	x = x.ConcatAddPairs(x)
+	x = x.ConcatAddPairs(x)
+	return x.GetElem(0)
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX2
+func (x Int16x16) ReduceSum() int16 {
+	return x.GetLo().Add(x.GetHi()).ReduceSum()
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX2
+func (x Uint16x16) ReduceSum() uint16 {
+	return x.GetLo().Add(x.GetHi()).ReduceSum()
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX2
+func (x Int32x8) ReduceSum() int32 {
+	return x.GetLo().Add(x.GetHi()).ReduceSum()
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX2
+func (x Uint32x8) ReduceSum() uint32 {
+	return x.GetLo().Add(x.GetHi()).ReduceSum()
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX512
+func (x Int16x32) ReduceSum() int16 {
+	return x.GetLo().Add(x.GetHi()).ReduceSum()
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX512
+func (x Uint16x32) ReduceSum() uint16 {
+	return x.GetLo().Add(x.GetHi()).ReduceSum()
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX512
+func (x Int32x16) ReduceSum() int32 {
+	return x.GetLo().Add(x.GetHi()).ReduceSum()
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX512
+func (x Uint32x16) ReduceSum() uint32 {
+	return x.GetLo().Add(x.GetHi()).ReduceSum()
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX
+func (x Int8x16) ReduceSum() int8 {
+	s := x.ToBits().SumOf8AbsDiff(Uint8x16{})
+	return int8(s.GetElem(0) + s.GetElem(1))
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX
+func (x Uint8x16) ReduceSum() uint8 {
+	s := x.SumOf8AbsDiff(Uint8x16{})
+	return uint8(s.GetElem(0) + s.GetElem(1))
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX2
+func (x Int8x32) ReduceSum() int8 {
+	return x.GetLo().Add(x.GetHi()).ReduceSum()
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX2
+func (x Uint8x32) ReduceSum() uint8 {
+	return x.GetLo().Add(x.GetHi()).ReduceSum()
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX512
+func (x Int8x64) ReduceSum() int8 {
+	return x.GetLo().Add(x.GetHi()).ReduceSum()
+}
+
+// ReduceSum returns the sum of all elements in x.
+//
+// Emulated, CPU Feature: AVX512
+func (x Uint8x64) ReduceSum() uint8 {
+	return x.GetLo().Add(x.GetHi()).ReduceSum()
+}

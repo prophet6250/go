@@ -507,7 +507,7 @@ func (x Uint8x16) broadcast1To64Masked(mask Mask8x16) Uint8x64
 //
 // A non-constant value of xyHiLo may result in significantly worse performance for this operation.
 //
-// Asm: VPCLMULQDQ, CPU Feature: AVX
+// Asm: VPCLMULQDQ, CPU Feature: AVXPCLMULQDQ
 func (x Uint64x2) carrylessMultiply(xyHiLo uint8, y Uint64x2) Uint64x2
 
 // carrylessMultiply computes one of two possible Galois polynomial
@@ -519,7 +519,7 @@ func (x Uint64x2) carrylessMultiply(xyHiLo uint8, y Uint64x2) Uint64x2
 //
 // A non-constant value of xyHiLo may result in significantly worse performance for this operation.
 //
-// Asm: VPCLMULQDQ, CPU Feature: AVX512VPCLMULQDQ
+// Asm: VPCLMULQDQ, CPU Feature: VPCLMULQDQ
 func (x Uint64x4) carrylessMultiply(xyHiLo uint8, y Uint64x4) Uint64x4
 
 // carrylessMultiply computes one of four possible Galois polynomial
@@ -822,6 +822,38 @@ func (x Uint64x4) concatSelectedConstantGrouped(hilos uint8, y Uint64x4) Uint64x
 //
 // Asm: VSHUFPD, CPU Feature: AVX512
 func (x Uint64x8) concatSelectedConstantGrouped(hilos uint8, y Uint64x8) Uint64x8
+
+/* onesCount */
+
+// onesCount counts the number of set bits in each element.
+//
+// Asm: VPOPCNTB, CPU Feature: AVX512BITALG
+func (x Int8x16) onesCount() Int8x16
+
+// onesCount counts the number of set bits in each element.
+//
+// Asm: VPOPCNTB, CPU Feature: AVX512BITALG
+func (x Int8x32) onesCount() Int8x32
+
+// onesCount counts the number of set bits in each element.
+//
+// Asm: VPOPCNTB, CPU Feature: AVX512BITALG
+func (x Int8x64) onesCount() Int8x64
+
+// onesCount counts the number of set bits in each element.
+//
+// Asm: VPOPCNTB, CPU Feature: AVX512BITALG
+func (x Uint8x16) onesCount() Uint8x16
+
+// onesCount counts the number of set bits in each element.
+//
+// Asm: VPOPCNTB, CPU Feature: AVX512BITALG
+func (x Uint8x32) onesCount() Uint8x32
+
+// onesCount counts the number of set bits in each element.
+//
+// Asm: VPOPCNTB, CPU Feature: AVX512BITALG
+func (x Uint8x64) onesCount() Uint8x64
 
 /* permuteScalars */
 

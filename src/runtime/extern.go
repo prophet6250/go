@@ -211,6 +211,10 @@ It is a comma-separated list of name=val pairs setting these named variables:
 	report. This also extends the information returned by runtime.Stack.
 	Setting N to 0 will report no ancestry information.
 
+	tracebackcrash: setting tracebackcrash=1 causes the runtime to throw a fatal
+	error on any unwinding error, even for unwinds such as CPU profiling that
+	otherwise tolerate errors and report a truncated stack.
+
 	tracefpunwindoff: setting tracefpunwindoff=1 forces the execution tracer
 	and block and mutex profilers to use the runtime's default stack
 	unwinder instead of frame pointer unwinding. This increases their

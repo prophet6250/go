@@ -31,6 +31,8 @@ import (
 // by the command packages. Paths ending with /... automatically
 // include all packages within subdirectories as well.
 // These will be imported during bootstrap as bootstrap/name, like bootstrap/math/big.
+// We also import packages in cmd/vendor/name as bootstrap/name,
+// like bootstrap/golang.org/x/mod/zip.
 var bootstrapDirs = []string{
 	"cmp",
 	"cmd/asm",
@@ -38,8 +40,54 @@ var bootstrapDirs = []string{
 	"cmd/cgo",
 	"cmd/compile",
 	"cmd/compile/internal/...",
+	"cmd/go",
+	"cmd/go/internal/base",
+	"cmd/go/internal/bug",
+	"cmd/go/internal/cache",
+	"cmd/go/internal/cacheprog",
+	"cmd/go/internal/cfg",
+	"cmd/go/internal/clean",
+	"cmd/go/internal/cmdflag",
+	"cmd/go/internal/doc",
+	"cmd/go/internal/envcmd",
+	"cmd/go/internal/fips140",
+	"cmd/go/internal/fmtcmd",
+	"cmd/go/internal/fsys",
+	"cmd/go/internal/generate",
+	"cmd/go/internal/gover",
+	"cmd/go/internal/help",
+	"cmd/go/internal/imports",
+	"cmd/go/internal/list",
+	"cmd/go/internal/load",
+	"cmd/go/internal/lockedfile",
+	"cmd/go/internal/lockedfile/internal/filelock",
+	"cmd/go/internal/mmap",
+	"cmd/go/internal/modcmd",
+	"cmd/go/internal/modfetch",
+	"cmd/go/internal/modfetch/codehost",
+	"cmd/go/internal/modget",
+	"cmd/go/internal/modindex",
+	"cmd/go/internal/modinfo",
+	"cmd/go/internal/modload",
+	"cmd/go/internal/mvs",
+	"cmd/go/internal/run",
+	"cmd/go/internal/search",
+	"cmd/go/internal/str",
+	"cmd/go/internal/telemetrycmd",
+	"cmd/go/internal/telemetrystats",
+	"cmd/go/internal/test",
+	"cmd/go/internal/tool",
+	"cmd/go/internal/toolchain",
+	"cmd/go/internal/trace",
+	"cmd/go/internal/vcs",
+	"cmd/go/internal/version",
+	"cmd/go/internal/vet",
+	"cmd/go/internal/web",
+	"cmd/go/internal/work",
+	"cmd/go/internal/workcmd",
 	"cmd/internal/archive",
 	"cmd/internal/bio",
+	"cmd/internal/buildid",
 	"cmd/internal/codesign",
 	"cmd/internal/dwarf",
 	"cmd/internal/edit",
@@ -50,16 +98,28 @@ var bootstrapDirs = []string{
 	"cmd/internal/obj/...",
 	"cmd/internal/objabi",
 	"cmd/internal/par",
+	"cmd/internal/pathcache",
 	"cmd/internal/pgo",
 	"cmd/internal/pkgpath",
+	"cmd/internal/pkgpattern",
 	"cmd/internal/quoted",
+	"cmd/internal/robustio",
 	"cmd/internal/src",
 	"cmd/internal/sys",
 	"cmd/internal/telemetry",
 	"cmd/internal/telemetry/counter",
+	"cmd/internal/test2json",
 	"cmd/link",
 	"cmd/link/internal/...",
 	"cmd/preprofile",
+	"cmd/vendor/golang.org/x/mod/internal/lazyregexp",
+	"cmd/vendor/golang.org/x/mod/modfile",
+	"cmd/vendor/golang.org/x/mod/module",
+	"cmd/vendor/golang.org/x/mod/semver",
+	"cmd/vendor/golang.org/x/mod/sumdb/dirhash",
+	"cmd/vendor/golang.org/x/mod/zip",
+	"cmd/vendor/golang.org/x/sync/semaphore",
+	"cmd/vendor/golang.org/x/tools/go/analysis",
 	"compress/flate",
 	"compress/zlib",
 	"container/heap",
@@ -67,6 +127,7 @@ var bootstrapDirs = []string{
 	"debug/elf",
 	"debug/macho",
 	"debug/pe",
+	"go/build",
 	"go/build/constraint",
 	"go/constant",
 	"go/version",
@@ -75,6 +136,8 @@ var bootstrapDirs = []string{
 	"cmd/internal/cov/covcmd",
 	"internal/bisect",
 	"internal/buildcfg",
+	"internal/cfg",
+	"internal/diff",
 	"internal/exportdata",
 	"internal/goarch",
 	"internal/godebugs",
@@ -87,14 +150,19 @@ var bootstrapDirs = []string{
 	// by the Go 1.17 version of gccgo. It's on this list only to
 	// support gccgo, and can be removed if we require gccgo 14 or later.
 	"internal/lazyregexp",
+	"internal/lazytemplate",
+	"internal/oserror",
 	"internal/pkgbits",
 	"internal/platform",
 	"internal/profile",
 	"internal/race",
 	"internal/runtime/gc",
 	"internal/saferio",
+	"internal/simd/variants",
+	"internal/singleflight",
 	"internal/strconv",
-	"internal/syscall/unix",
+	"internal/syslist",
+	"internal/trace/traceviewer/format",
 	"internal/types/errors",
 	"internal/unsafeheader",
 	"internal/xcoff",
@@ -152,7 +220,7 @@ func bootstrapBuildTools() {
 		fatalf("%s does not meet the minimum bootstrap requirement of %s or later", ver, minBootstrap)
 	}
 
-	xprintf("Building Go toolchain1 using %s.\n", goroot_bootstrap)
+	xprintf("Building Go toolchain1 and bootstrap cmd/go (go_bootstrap) using %s.\n", goroot_bootstrap)
 
 	mkbuildcfg(pathf("%s/src/internal/buildcfg/zbootstrap.go", goroot))
 	mkobjabi(pathf("%s/src/cmd/internal/objabi/zbootstrap.go", goroot))
@@ -169,6 +237,7 @@ func bootstrapBuildTools() {
 	xmkdirall(base)
 
 	// Copy source code into $GOROOT/pkg/bootstrap and rewrite import paths.
+	copySpan := startSpan("copy bootstrap sources")
 	minBootstrapVers := requiredBootstrapVersion(goModVersion()) // require the minimum required go version to build this go version in the go.mod file
 	writefile("module bootstrap\ngo "+minBootstrapVers+"\n", pathf("%s/%s", base, "go.mod"), 0)
 	for _, dir := range bootstrapDirs {
@@ -181,7 +250,7 @@ func bootstrapBuildTools() {
 
 			name := filepath.Base(path)
 			src := pathf("%s/src/%s", goroot, path)
-			dst := pathf("%s/%s", base, path)
+			dst := pathf("%s/%s", base, strings.TrimPrefix(filepath.ToSlash(path), "cmd/vendor/"))
 
 			if info.IsDir() {
 				if !recurse && path != dir || name == "testdata" {
@@ -214,6 +283,7 @@ func bootstrapBuildTools() {
 			return nil
 		})
 	}
+	copySpan.done()
 
 	// Set up environment for invoking Go bootstrap toolchains go command.
 	// GOROOT points at Go bootstrap GOROOT,
@@ -221,7 +291,8 @@ func bootstrapBuildTools() {
 	// GOBIN is empty, so that binaries are installed to GOPATH/bin,
 	// and GOOS, GOHOSTOS, GOARCH, and GOHOSTOS are empty,
 	// so that Go bootstrap toolchain builds whatever kind of binary it knows how to build.
-	// Restore GOROOT, GOPATH, and GOBIN when done.
+	// Set GOFIPS140=off to work with the purego build tag.
+	// Restore GOROOT, GOPATH, GOBIN, and GOFIPS140 when done.
 	// Don't bother with GOOS, GOHOSTOS, GOARCH, and GOHOSTARCH,
 	// because setup will take care of those when bootstrapBuildTools returns.
 
@@ -234,19 +305,22 @@ func bootstrapBuildTools() {
 	defer os.Setenv("GOBIN", os.Getenv("GOBIN"))
 	os.Setenv("GOBIN", "")
 
-	os.Setenv("GOOS", "")
+	defer os.Setenv("GOFIPS140", os.Getenv("GOFIPS140"))
+	os.Setenv("GOFIPS140", "off")
+
+	os.Setenv("GOOS", gohostos)
 	os.Setenv("GOHOSTOS", "")
-	os.Setenv("GOARCH", "")
+	os.Setenv("GOARCH", gohostarch)
 	os.Setenv("GOHOSTARCH", "")
 
 	// Run Go bootstrap to build binaries.
-	// Use the math_big_pure_go build tag to disable the assembly in math/big
-	// which may contain unsupported instructions.
-	// Use the purego build tag to disable other assembly code.
+	bindir := pathf("%s/bin", workspace)
+	xmkdirall(bindir)
 	cmd := []string{
 		pathf("%s/bin/go", goroot_bootstrap),
-		"install",
-		"-tags=math_big_pure_go compiler_bootstrap purego",
+		"build",
+		"-o", bindir,
+		"-tags=compiler_bootstrap,cmd_go_bootstrap",
 	}
 	if vflag > 0 {
 		cmd = append(cmd, "-v")
@@ -254,19 +328,28 @@ func bootstrapBuildTools() {
 	if tool := os.Getenv("GOBOOTSTRAP_TOOLEXEC"); tool != "" {
 		cmd = append(cmd, "-toolexec="+tool)
 	}
+	cmd = append(cmd, maybeTraceFlag("toolchain1")...)
 	cmd = append(cmd, "bootstrap/cmd/...")
+	toolchain1Span := startSpan("toolchain1")
 	run(base, ShowOutput|CheckExit, cmd...)
+	toolchain1Span.done()
 
 	// Copy binaries into tool binary directory.
+	copyBinSpan := startSpan("copy toolchain1 binaries")
 	for _, name := range bootstrapDirs {
 		if !strings.HasPrefix(name, "cmd/") {
 			continue
 		}
 		name = name[len("cmd/"):]
 		if !strings.Contains(name, "/") {
-			copyfile(pathf("%s/%s%s", tooldir, name, exe), pathf("%s/bin/%s%s", workspace, name, exe), writeExec)
+			tool := name
+			if name == "go" {
+				tool = "go_bootstrap"
+			}
+			copyfile(pathf("%s/%s%s", tooldir, tool, exe), pathf("%s/bin/%s%s", workspace, name, exe), writeExec)
 		}
 	}
+	copyBinSpan.done()
 
 	if vflag > 0 {
 		xprintf("\n")
@@ -277,12 +360,12 @@ var ssaRewriteFileSubstring = filepath.FromSlash("src/cmd/compile/internal/ssaco
 
 func init() {
 	if ssaRewriteSplitPackages {
-		ssaRewriteFileSubstring = filepath.FromSlash("src/cmd/compile/internal/ssarewrite")
+		ssaRewriteFileSubstring = filepath.FromSlash("src/cmd/compile/internal/ssa/rewrite")
 	}
 }
 
 // isUnneededSSARewriteFile reports whether srcFile is a
-// src/cmd/compile/internal/ssarewrite/ARCH/rewriteARCHNAME.go file or a
+// src/cmd/compile/internal/ssa/rewrite/ARCH/rewriteARCHNAME.go file or a
 // src/cmd/compile/internal/ssacompile/rewriteARCHNAME.go file for an
 // architecture that isn't for the given GOARCH.
 //
@@ -355,6 +438,7 @@ func bootstrapFixImports(srcFile string) string {
 	lines := strings.SplitAfter(text, "\n")
 	inBlock := false
 	inComment := false
+	sawImport := false
 	for i, line := range lines {
 		if strings.HasSuffix(line, "*/\n") {
 			inComment = false
@@ -367,6 +451,7 @@ func bootstrapFixImports(srcFile string) string {
 		}
 		if strings.HasPrefix(line, "import (") {
 			inBlock = true
+			sawImport = true
 			continue
 		}
 		if inBlock && strings.HasPrefix(line, ")") {
@@ -377,8 +462,12 @@ func bootstrapFixImports(srcFile string) string {
 		var m []string
 		if !inBlock {
 			if !strings.HasPrefix(line, "import ") {
+				if sawImport && strings.TrimSpace(line) != "" && !strings.HasPrefix(line, "//") {
+					break
+				}
 				continue
 			}
+			sawImport = true
 			m = importRE.FindStringSubmatch(line)
 			if m == nil {
 				fatalf("%s:%d: invalid import declaration: %q", srcFile, i+1, line)
@@ -398,11 +487,18 @@ func bootstrapFixImports(srcFile string) string {
 			path = "bootstrap/" + path
 		} else {
 			for _, dir := range bootstrapDirs {
-				if path == dir {
-					path = "bootstrap/" + dir
+				if path == dir || "cmd/vendor/"+path == dir {
+					path = "bootstrap/" + path
 					break
 				}
 			}
+		}
+
+		// Ignore imports of cmd/go internal dependencies that have linknames.
+		// Their behavior won't affect anything meaningful in the bootstrap toolchain.
+		// TODO(matloob): it would be even better to stub out their imports.
+		if path == "internal/godebug" || path == "internal/syscall/unix" || path == "internal/syscall/windows" {
+			continue
 		}
 
 		// Rewrite use of internal/reflectlite to be plain reflect.

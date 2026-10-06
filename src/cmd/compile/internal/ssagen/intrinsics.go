@@ -665,7 +665,7 @@ func initIntrinsics(cfg *intrinsicBuildConfig) {
 			s.vars[memVar] = p1
 			return p0
 		},
-		sys.AMD64, sys.Loong64)
+		sys.AMD64, sys.Loong64, sys.RISCV64)
 	addF("internal/runtime/atomic", "And32",
 		func(s *state, n *ir.CallExpr, args []*ssa.Value) *ssa.Value {
 			v := s.newValue3(ssaop.OpAtomicAnd32value, types.NewTuple(types.Types[types.TUINT32], types.TypeMem), args[0], args[1], s.mem())
@@ -673,7 +673,7 @@ func initIntrinsics(cfg *intrinsicBuildConfig) {
 			s.vars[memVar] = p1
 			return p0
 		},
-		sys.AMD64, sys.Loong64)
+		sys.AMD64, sys.Loong64, sys.RISCV64)
 	addF("internal/runtime/atomic", "Or64",
 		func(s *state, n *ir.CallExpr, args []*ssa.Value) *ssa.Value {
 			v := s.newValue3(ssaop.OpAtomicOr64value, types.NewTuple(types.Types[types.TUINT64], types.TypeMem), args[0], args[1], s.mem())
@@ -681,7 +681,7 @@ func initIntrinsics(cfg *intrinsicBuildConfig) {
 			s.vars[memVar] = p1
 			return p0
 		},
-		sys.AMD64, sys.Loong64)
+		sys.AMD64, sys.Loong64, sys.RISCV64)
 	addF("internal/runtime/atomic", "Or32",
 		func(s *state, n *ir.CallExpr, args []*ssa.Value) *ssa.Value {
 			v := s.newValue3(ssaop.OpAtomicOr32value, types.NewTuple(types.Types[types.TUINT32], types.TypeMem), args[0], args[1], s.mem())
@@ -689,7 +689,7 @@ func initIntrinsics(cfg *intrinsicBuildConfig) {
 			s.vars[memVar] = p1
 			return p0
 		},
-		sys.AMD64, sys.Loong64)
+		sys.AMD64, sys.Loong64, sys.RISCV64)
 
 	// Aliases for atomic load operations
 	alias("internal/runtime/atomic", "Loadint32", "internal/runtime/atomic", "Load", all...)
@@ -932,6 +932,52 @@ func initIntrinsics(cfg *intrinsicBuildConfig) {
 	addF("math", "Trunc",
 		makeRoundLoong64(ssaop.OpTrunc),
 		sys.Loong64)
+
+	makeRoundRISCV64 := func(op ssaop.Op) func(s *state, n *ir.CallExpr, args []*ssa.Value) *ssa.Value {
+		return func(s *state, n *ir.CallExpr, args []*ssa.Value) *ssa.Value {
+			// FCVT.L.D only gives the right result while the rounded value fits
+			// in int64. For larger finite values, infinities, and NaNs, these
+			// operations return x unchanged.
+			abs := s.newValue1(ssaop.OpAbs, types.Types[types.TFLOAT64], args[0])
+			limit := s.constFloat64(types.Types[types.TFLOAT64], float64(1<<52))
+			inRange := s.newValue2(ssaop.OpLess64F, types.Types[types.TBOOL], abs, limit)
+			b := s.endBlock()
+			b.Kind = block.BlockIf
+			b.SetControl(inRange)
+			bTrue := s.f.NewBlock(block.BlockPlain)
+			bFalse := s.f.NewBlock(block.BlockPlain)
+			bEnd := s.f.NewBlock(block.BlockPlain)
+			b.AddEdgeTo(bTrue)
+			b.AddEdgeTo(bFalse)
+			b.Likely = ssa.BranchLikely
+
+			s.startBlock(bTrue)
+			s.vars[n] = s.newValue1(op, types.Types[types.TFLOAT64], args[0])
+			s.endBlock().AddEdgeTo(bEnd)
+
+			s.startBlock(bFalse)
+			s.vars[n] = args[0]
+			s.endBlock().AddEdgeTo(bEnd)
+
+			s.startBlock(bEnd)
+			return s.variable(n, types.Types[types.TFLOAT64])
+		}
+	}
+	addF("math", "RoundToEven",
+		makeRoundRISCV64(ssaop.OpRISCV64LoweredRoundToEvenD),
+		sys.RISCV64)
+	addF("math", "Round",
+		makeRoundRISCV64(ssaop.OpRISCV64LoweredRoundD),
+		sys.RISCV64)
+	addF("math", "Floor",
+		makeRoundRISCV64(ssaop.OpRISCV64LoweredFloorD),
+		sys.RISCV64)
+	addF("math", "Ceil",
+		makeRoundRISCV64(ssaop.OpRISCV64LoweredCeilD),
+		sys.RISCV64)
+	addF("math", "Trunc",
+		makeRoundRISCV64(ssaop.OpRISCV64LoweredTruncD),
+		sys.RISCV64)
 
 	/******** math/bits ********/
 	addF("math/bits", "TrailingZeros64",
@@ -1336,16 +1382,16 @@ func initIntrinsics(cfg *intrinsicBuildConfig) {
 	alias("sync/atomic", "AddUintptr", "internal/runtime/atomic", "Xadd", p4...)
 	alias("sync/atomic", "AddUintptr", "internal/runtime/atomic", "Xadd64", p8...)
 
-	alias("sync/atomic", "AndInt32", "internal/runtime/atomic", "And32", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64)
-	alias("sync/atomic", "AndUint32", "internal/runtime/atomic", "And32", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64)
-	alias("sync/atomic", "AndInt64", "internal/runtime/atomic", "And64", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64)
-	alias("sync/atomic", "AndUint64", "internal/runtime/atomic", "And64", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64)
-	alias("sync/atomic", "AndUintptr", "internal/runtime/atomic", "And64", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64)
-	alias("sync/atomic", "OrInt32", "internal/runtime/atomic", "Or32", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64)
-	alias("sync/atomic", "OrUint32", "internal/runtime/atomic", "Or32", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64)
-	alias("sync/atomic", "OrInt64", "internal/runtime/atomic", "Or64", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64)
-	alias("sync/atomic", "OrUint64", "internal/runtime/atomic", "Or64", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64)
-	alias("sync/atomic", "OrUintptr", "internal/runtime/atomic", "Or64", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64)
+	alias("sync/atomic", "AndInt32", "internal/runtime/atomic", "And32", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64, sys.ArchRISCV64)
+	alias("sync/atomic", "AndUint32", "internal/runtime/atomic", "And32", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64, sys.ArchRISCV64)
+	alias("sync/atomic", "AndInt64", "internal/runtime/atomic", "And64", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64, sys.ArchRISCV64)
+	alias("sync/atomic", "AndUint64", "internal/runtime/atomic", "And64", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64, sys.ArchRISCV64)
+	alias("sync/atomic", "AndUintptr", "internal/runtime/atomic", "And64", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64, sys.ArchRISCV64)
+	alias("sync/atomic", "OrInt32", "internal/runtime/atomic", "Or32", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64, sys.ArchRISCV64)
+	alias("sync/atomic", "OrUint32", "internal/runtime/atomic", "Or32", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64, sys.ArchRISCV64)
+	alias("sync/atomic", "OrInt64", "internal/runtime/atomic", "Or64", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64, sys.ArchRISCV64)
+	alias("sync/atomic", "OrUint64", "internal/runtime/atomic", "Or64", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64, sys.ArchRISCV64)
+	alias("sync/atomic", "OrUintptr", "internal/runtime/atomic", "Or64", sys.ArchARM64, sys.ArchAMD64, sys.ArchLoong64, sys.ArchRISCV64)
 
 	/******** math/big ********/
 	alias("math/big", "mulWW", "math/bits", "Mul64", p8...)
@@ -1679,7 +1725,63 @@ func initIntrinsics(cfg *intrinsicBuildConfig) {
 		simdAMD64Intrinsics(addF)
 		simdARM64Intrinsics(addF)
 		initWasmSIMD()
-		sveIntrinsics(addF)
+		simdARM64SVEIntrinsics(addF)
+		// Hand-written SVE infra intrinsic (not generated from a type op): vl
+		// reads the runtime vector length so the package can bound-check it.
+		addF(simdPackage, "vl", opLen0(ssaop.OpScalableVectorLen, types.Types[types.TINT]), sys.ARM64)
+		// TODO: generate these once simdgen supports predicates (mask CL).
+		for _, t := range []struct {
+			name  string
+			bytes int64
+		}{
+			{"Int8s", 1}, {"Uint8s", 1}, {"Int16s", 2}, {"Uint16s", 2},
+			{"Int32s", 4}, {"Uint32s", 4}, {"Float32s", 4},
+			{"Int64s", 8}, {"Uint64s", 8}, {"Float64s", 8},
+		} {
+			// The exported LoadT/StoreT and LoadTPart/StorePart are generated Go
+			// wrappers (see types_sve.go); only the raw whole-register and predicated
+			// load/store are intrinsics.
+			addF(simdPackage, "load"+t.name, sveLoadWhole(), sys.ARM64)
+			addF(simdPackage, t.name+".store", sveStoreWhole(), sys.ARM64)
+			addF(simdPackage, "load"+t.name+"Part", sveLoadPart(t.bytes), sys.ARM64)
+			addF(simdPackage, t.name+".storePart", sveStorePart(t.bytes), sys.ARM64)
+		}
+		// IfElse backs both the IfElse and Masked methods on every scalable vector.
+		for _, t := range []struct {
+			name string
+			op   ssaop.Op
+		}{
+			{"Int8s", ssaop.OpIfElseInt8s},
+			{"Uint8s", ssaop.OpIfElseUint8s},
+			{"Int16s", ssaop.OpIfElseInt16s},
+			{"Uint16s", ssaop.OpIfElseUint16s},
+			{"Int32s", ssaop.OpIfElseInt32s},
+			{"Uint32s", ssaop.OpIfElseUint32s},
+			{"Float32s", ssaop.OpIfElseFloat32s},
+			{"Int64s", ssaop.OpIfElseInt64s},
+			{"Uint64s", ssaop.OpIfElseUint64s},
+			{"Float64s", ssaop.OpIfElseFloat64s},
+		} {
+			addF(simdPackage, t.name+".IfElse", opLen3(t.op, types.TypeVec256), sys.ARM64)
+		}
+		// BroadcastT constructs a scalable vector from a scalar.
+		for _, t := range []struct {
+			name string
+			op   ssaop.Op
+		}{
+			{"Int8s", ssaop.OpBroadcastInt8s},
+			{"Uint8s", ssaop.OpBroadcastUint8s},
+			{"Int16s", ssaop.OpBroadcastInt16s},
+			{"Uint16s", ssaop.OpBroadcastUint16s},
+			{"Int32s", ssaop.OpBroadcastInt32s},
+			{"Uint32s", ssaop.OpBroadcastUint32s},
+			{"Float32s", ssaop.OpBroadcastFloat32s},
+			{"Int64s", ssaop.OpBroadcastInt64s},
+			{"Uint64s", ssaop.OpBroadcastUint64s},
+			{"Float64s", ssaop.OpBroadcastFloat64s},
+		} {
+			addF(simdPackage, "Broadcast"+t.name, opLen1(t.op, types.TypeVec256), sys.ARM64)
+		}
 
 		addF(simdPackage, "ClearAVXUpperBits",
 			func(s *state, n *ir.CallExpr, args []*ssa.Value) *ssa.Value {
@@ -2335,13 +2437,15 @@ func simdBroadcast(op ssaop.Op) func(s *state, n *ir.CallExpr, args []*ssa.Value
 
 func simdLoad() func(s *state, n *ir.CallExpr, args []*ssa.Value) *ssa.Value {
 	return func(s *state, n *ir.CallExpr, args []*ssa.Value) *ssa.Value {
-		return s.newValue2(ssaop.OpLoad, n.Type(), args[0], s.mem())
+		ptr := s.nilCheck(args[0])
+		return s.newValue2(ssaop.OpLoad, n.Type(), ptr, s.mem())
 	}
 }
 
 func simdStore() func(s *state, n *ir.CallExpr, args []*ssa.Value) *ssa.Value {
 	return func(s *state, n *ir.CallExpr, args []*ssa.Value) *ssa.Value {
-		s.store(args[0].Type, args[1], args[0])
+		ptr := s.nilCheck(args[1])
+		s.store(args[0].Type, ptr, args[0])
 		return nil
 	}
 }
@@ -2389,6 +2493,68 @@ func simdMaskedLoad(op ssaop.Op) func(s *state, n *ir.CallExpr, args []*ssa.Valu
 func simdMaskedStore(op ssaop.Op) func(s *state, n *ir.CallExpr, args []*ssa.Value) *ssa.Value {
 	return func(s *state, n *ir.CallExpr, args []*ssa.Value) *ssa.Value {
 		s.vars[memVar] = s.newValue4A(op, types.TypeMem, args[0].Type, args[1], args[2], args[0], s.mem())
+		return nil
+	}
+}
+
+// sveByteCount returns len(s)*elemBytes as an SSA int, the number of active bytes
+// for a byte-granular scalable load/store of an elemBytes-wide element type.
+func sveByteCount(s *state, length *ssa.Value, elemBytes int64) *ssa.Value {
+	if elemBytes == 1 {
+		return length
+	}
+	return s.newValue2(ssaop.OpMul64, types.Types[types.TINT], length, s.constInt64(types.Types[types.TINT], elemBytes))
+}
+
+// slicePtrLen extracts the data pointer and length of a slice SSA value.
+func slicePtrLen(s *state, slice *ssa.Value) (ptr, length *ssa.Value) {
+	ptr = s.newValue1(ssaop.OpSlicePtr, types.NewPtr(slice.Type.Elem()), slice)
+	length = s.newValue1(ssaop.OpSliceLen, types.Types[types.TINT], slice)
+	return
+}
+
+// sveLoadWhole builds a raw whole-register load loadT(s): a generic Load of the
+// return type from the slice's data pointer, lowered to ZLDR. The exported wrapper
+// (generated Go) bounds-checks the slice — and panics if it is too short — so
+// this raw intrinsic never reads past it. args are (s).
+func sveLoadWhole() intrinsicBuilder {
+	return func(s *state, n *ir.CallExpr, args []*ssa.Value) *ssa.Value {
+		ptr, _ := slicePtrLen(s, args[0])
+		return s.newValue2(ssaop.OpLoad, n.Type(), ptr, s.mem())
+	}
+}
+
+// sveStoreWhole is the store counterpart of sveLoadWhole: x.store(s).
+// args are (x, s).
+func sveStoreWhole() intrinsicBuilder {
+	return func(s *state, n *ir.CallExpr, args []*ssa.Value) *ssa.Value {
+		ptr, _ := slicePtrLen(s, args[1])
+		s.vars[memVar] = s.newValue3A(ssaop.OpStore, types.TypeMem, args[0].Type, ptr, args[0], s.mem())
+		return nil
+	}
+}
+
+// sveLoadPart builds the raw predicated load loadTPart(s): a PWHILELT-governed
+// ZLD1B that reads len(s) elements (inactive lanes zeroed). It is byte-granular
+// for every element type, which is correct because arm64 is little-endian, so a
+// contiguous byte copy preserves element layout. The exported LoadTPart wrapper
+// (generated Go) passes s[:min(len(s), Len())] and handles the empty/nil case,
+// so this intrinsic never sees a length past the slice or the vector.
+func sveLoadPart(elemBytes int64) intrinsicBuilder {
+	return func(s *state, n *ir.CallExpr, args []*ssa.Value) *ssa.Value {
+		ptr, length := slicePtrLen(s, args[0])
+		mask := s.newValue1(ssaop.OpCount8s, types.TypeMask, sveByteCount(s, length, elemBytes))
+		return s.newValue3(ssaop.OpLoadMasked8, n.Type(), ptr, mask, s.mem())
+	}
+}
+
+// sveStorePart is the store counterpart of sveLoadPart: x.storePart(s). args are
+// (x, s).
+func sveStorePart(elemBytes int64) intrinsicBuilder {
+	return func(s *state, n *ir.CallExpr, args []*ssa.Value) *ssa.Value {
+		ptr, length := slicePtrLen(s, args[1])
+		mask := s.newValue1(ssaop.OpCount8s, types.TypeMask, sveByteCount(s, length, elemBytes))
+		s.vars[memVar] = s.newValue4A(ssaop.OpStoreMasked8, types.TypeMem, args[0].Type, ptr, mask, args[0], s.mem())
 		return nil
 	}
 }
@@ -2442,16 +2608,6 @@ func IsIntrinsicCall(n *ir.CallExpr) bool {
 		return false
 	}
 	return IsIntrinsicSym(name.Sym())
-}
-
-func sveIntrinsics(addF func(pkg, fn string, b intrinsicBuilder, archFamilies ...sys.ArchFamily)) {
-	addF(simdPackage, "loadInt8sMasked", simdMaskedLoad(ssaop.OpLoadMasked8), sys.ARM64)
-	addF(simdPackage, "Int8s.storeMasked", simdMaskedStore(ssaop.OpStoreMasked8), sys.ARM64)
-	addF(simdPackage, "Mask8sFromCount", opLen1(ssaop.OpCount8s, types.TypeMask), sys.ARM64)
-	addF(simdPackage, "Int8s.Greater", opLen2(ssaop.OpGreaterInt8s, types.TypeMask), sys.ARM64)
-	addF(simdPackage, "Int8s.IfElse", opLen3(ssaop.OpMergeInt8s, types.TypeVec256), sys.ARM64)
-	addF(simdPackage, "Int8s.Add", opLen2(ssaop.OpAddInt8s, types.TypeVec256), sys.ARM64)
-	addF(simdPackage, "vl", opLen0(ssaop.OpScalableVectorLen, types.Types[types.TINT]), sys.ARM64)
 }
 
 func IsIntrinsicSym(sym *types.Sym) bool {

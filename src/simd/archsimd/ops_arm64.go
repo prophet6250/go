@@ -276,6 +276,12 @@ func (x Float64x2) ConcatAddPairs(y Float64x2) Float64x2
 // For x = [x0, x1, x2, x3, ...] and y = [y0, y1, y2, y3, ...], the result is [x0+x1, x2+x3, ..., y0+y1, y2+y3, ...].
 //
 // Asm: VADDP, CPU Feature: NEON
+func (x Int8x16) ConcatAddPairs(y Int8x16) Int8x16
+
+// ConcatAddPairs horizontally adds adjacent pairs of elements.
+// For x = [x0, x1, x2, x3, ...] and y = [y0, y1, y2, y3, ...], the result is [x0+x1, x2+x3, ..., y0+y1, y2+y3, ...].
+//
+// Asm: VADDP, CPU Feature: NEON
 func (x Int16x8) ConcatAddPairs(y Int16x8) Int16x8
 
 // ConcatAddPairs horizontally adds adjacent pairs of elements.
@@ -289,6 +295,12 @@ func (x Int32x4) ConcatAddPairs(y Int32x4) Int32x4
 //
 // Asm: VADDP, CPU Feature: NEON
 func (x Int64x2) ConcatAddPairs(y Int64x2) Int64x2
+
+// ConcatAddPairs horizontally adds adjacent pairs of elements.
+// For x = [x0, x1, x2, x3, ...] and y = [y0, y1, y2, y3, ...], the result is [x0+x1, x2+x3, ..., y0+y1, y2+y3, ...].
+//
+// Asm: VADDP, CPU Feature: NEON
+func (x Uint8x16) ConcatAddPairs(y Uint8x16) Uint8x16
 
 // ConcatAddPairs horizontally adds adjacent pairs of elements.
 // For x = [x0, x1, x2, x3, ...] and y = [y0, y1, y2, y3, ...], the result is [x0+x1, x2+x3, ..., y0+y1, y2+y3, ...].
@@ -357,6 +369,106 @@ func (x Uint32x4) ConcatEven(y Uint32x4) Uint32x4
 //
 // Asm: VUZP1, CPU Feature: NEON
 func (x Uint64x2) ConcatEven(y Uint64x2) Uint64x2
+
+/* ConcatMaxPairs */
+
+// ConcatMaxPairs horizontally computes the maximum of adjacent pairs of elements.
+// For x = [x0, x1, x2, x3] and y = [y0, y1, y2, y3], the result is [max(x0,x1), max(x2,x3), max(y0,y1), max(y2,y3)].
+//
+// Asm: VFMAXP, CPU Feature: NEON
+func (x Float32x4) ConcatMaxPairs(y Float32x4) Float32x4
+
+// ConcatMaxPairs horizontally computes the maximum of adjacent pairs of elements.
+// For x = [x0, x1] and y = [y0, y1], the result is [max(x0,x1), max(y0,y1)].
+//
+// Asm: VFMAXP, CPU Feature: NEON
+func (x Float64x2) ConcatMaxPairs(y Float64x2) Float64x2
+
+// ConcatMaxPairs horizontally computes the maximum of adjacent pairs of elements.
+// For x = [x0, x1, x2, x3, ...] and y = [y0, y1, y2, y3, ...], the result is [max(x0,x1), max(x2,x3), ..., max(y0,y1), max(y2,y3), ...].
+//
+// Asm: VSMAXP, CPU Feature: NEON
+func (x Int8x16) ConcatMaxPairs(y Int8x16) Int8x16
+
+// ConcatMaxPairs horizontally computes the maximum of adjacent pairs of elements.
+// For x = [x0, x1, x2, x3, ...] and y = [y0, y1, y2, y3, ...], the result is [max(x0,x1), max(x2,x3), ..., max(y0,y1), max(y2,y3), ...].
+//
+// Asm: VSMAXP, CPU Feature: NEON
+func (x Int16x8) ConcatMaxPairs(y Int16x8) Int16x8
+
+// ConcatMaxPairs horizontally computes the maximum of adjacent pairs of elements.
+// For x = [x0, x1, x2, x3] and y = [y0, y1, y2, y3], the result is [max(x0,x1), max(x2,x3), max(y0,y1), max(y2,y3)].
+//
+// Asm: VSMAXP, CPU Feature: NEON
+func (x Int32x4) ConcatMaxPairs(y Int32x4) Int32x4
+
+// ConcatMaxPairs horizontally computes the maximum of adjacent pairs of elements.
+// For x = [x0, x1, x2, x3, ...] and y = [y0, y1, y2, y3, ...], the result is [max(x0,x1), max(x2,x3), ..., max(y0,y1), max(y2,y3), ...].
+//
+// Asm: VUMAXP, CPU Feature: NEON
+func (x Uint8x16) ConcatMaxPairs(y Uint8x16) Uint8x16
+
+// ConcatMaxPairs horizontally computes the maximum of adjacent pairs of elements.
+// For x = [x0, x1, x2, x3, ...] and y = [y0, y1, y2, y3, ...], the result is [max(x0,x1), max(x2,x3), ..., max(y0,y1), max(y2,y3), ...].
+//
+// Asm: VUMAXP, CPU Feature: NEON
+func (x Uint16x8) ConcatMaxPairs(y Uint16x8) Uint16x8
+
+// ConcatMaxPairs horizontally computes the maximum of adjacent pairs of elements.
+// For x = [x0, x1, x2, x3] and y = [y0, y1, y2, y3], the result is [max(x0,x1), max(x2,x3), max(y0,y1), max(y2,y3)].
+//
+// Asm: VUMAXP, CPU Feature: NEON
+func (x Uint32x4) ConcatMaxPairs(y Uint32x4) Uint32x4
+
+/* ConcatMinPairs */
+
+// ConcatMinPairs horizontally computes the minimum of adjacent pairs of elements.
+// For x = [x0, x1, x2, x3] and y = [y0, y1, y2, y3], the result is [min(x0,x1), min(x2,x3), min(y0,y1), min(y2,y3)].
+//
+// Asm: VFMINP, CPU Feature: NEON
+func (x Float32x4) ConcatMinPairs(y Float32x4) Float32x4
+
+// ConcatMinPairs horizontally computes the minimum of adjacent pairs of elements.
+// For x = [x0, x1] and y = [y0, y1], the result is [min(x0,x1), min(y0,y1)].
+//
+// Asm: VFMINP, CPU Feature: NEON
+func (x Float64x2) ConcatMinPairs(y Float64x2) Float64x2
+
+// ConcatMinPairs horizontally computes the minimum of adjacent pairs of elements.
+// For x = [x0, x1, x2, x3, ...] and y = [y0, y1, y2, y3, ...], the result is [min(x0,x1), min(x2,x3), ..., min(y0,y1), min(y2,y3), ...].
+//
+// Asm: VSMINP, CPU Feature: NEON
+func (x Int8x16) ConcatMinPairs(y Int8x16) Int8x16
+
+// ConcatMinPairs horizontally computes the minimum of adjacent pairs of elements.
+// For x = [x0, x1, x2, x3, ...] and y = [y0, y1, y2, y3, ...], the result is [min(x0,x1), min(x2,x3), ..., min(y0,y1), min(y2,y3), ...].
+//
+// Asm: VSMINP, CPU Feature: NEON
+func (x Int16x8) ConcatMinPairs(y Int16x8) Int16x8
+
+// ConcatMinPairs horizontally computes the minimum of adjacent pairs of elements.
+// For x = [x0, x1, x2, x3] and y = [y0, y1, y2, y3], the result is [min(x0,x1), min(x2,x3), min(y0,y1), min(y2,y3)].
+//
+// Asm: VSMINP, CPU Feature: NEON
+func (x Int32x4) ConcatMinPairs(y Int32x4) Int32x4
+
+// ConcatMinPairs horizontally computes the minimum of adjacent pairs of elements.
+// For x = [x0, x1, x2, x3, ...] and y = [y0, y1, y2, y3, ...], the result is [min(x0,x1), min(x2,x3), ..., min(y0,y1), min(y2,y3), ...].
+//
+// Asm: VUMINP, CPU Feature: NEON
+func (x Uint8x16) ConcatMinPairs(y Uint8x16) Uint8x16
+
+// ConcatMinPairs horizontally computes the minimum of adjacent pairs of elements.
+// For x = [x0, x1, x2, x3, ...] and y = [y0, y1, y2, y3, ...], the result is [min(x0,x1), min(x2,x3), ..., min(y0,y1), min(y2,y3), ...].
+//
+// Asm: VUMINP, CPU Feature: NEON
+func (x Uint16x8) ConcatMinPairs(y Uint16x8) Uint16x8
+
+// ConcatMinPairs horizontally computes the minimum of adjacent pairs of elements.
+// For x = [x0, x1, x2, x3] and y = [y0, y1, y2, y3], the result is [min(x0,x1), min(x2,x3), min(y0,y1), min(y2,y3)].
+//
+// Asm: VUMINP, CPU Feature: NEON
+func (x Uint32x4) ConcatMinPairs(y Uint32x4) Uint32x4
 
 /* ConcatOdd */
 
@@ -1547,6 +1659,64 @@ func (x Int64x2) SaturateToUint32() Uint32x4
 // Asm: VUQXTN, CPU Feature: NEON
 func (x Uint64x2) SaturateToUint32() Uint32x4
 
+/* ScaleSaturated */
+
+// ScaleSaturated shifts each element in x by the signed value of the least significant byte
+// of y's corresponding element (positive shifts left, negative shifts right).
+// Results are saturated to the signed range on overflow.
+//
+// Asm: VSQSHL, CPU Feature: NEON
+func (x Int8x16) ScaleSaturated(y Int8x16) Int8x16
+
+// ScaleSaturated shifts each element in x by the signed value of the least significant byte
+// of y's corresponding element (positive shifts left, negative shifts right).
+// Results are saturated to the signed range on overflow.
+//
+// Asm: VSQSHL, CPU Feature: NEON
+func (x Int16x8) ScaleSaturated(y Int16x8) Int16x8
+
+// ScaleSaturated shifts each element in x by the signed value of the least significant byte
+// of y's corresponding element (positive shifts left, negative shifts right).
+// Results are saturated to the signed range on overflow.
+//
+// Asm: VSQSHL, CPU Feature: NEON
+func (x Int32x4) ScaleSaturated(y Int32x4) Int32x4
+
+// ScaleSaturated shifts each element in x by the signed value of the least significant byte
+// of y's corresponding element (positive shifts left, negative shifts right).
+// Results are saturated to the signed range on overflow.
+//
+// Asm: VSQSHL, CPU Feature: NEON
+func (x Int64x2) ScaleSaturated(y Int64x2) Int64x2
+
+// ScaleSaturated shifts each element in x by the signed value of the least significant byte
+// of y's corresponding element (positive shifts left, negative shifts right).
+// Results are saturated to the unsigned range on overflow.
+//
+// Asm: VUQSHL, CPU Feature: NEON
+func (x Uint8x16) ScaleSaturated(y Int8x16) Uint8x16
+
+// ScaleSaturated shifts each element in x by the signed value of the least significant byte
+// of y's corresponding element (positive shifts left, negative shifts right).
+// Results are saturated to the unsigned range on overflow.
+//
+// Asm: VUQSHL, CPU Feature: NEON
+func (x Uint16x8) ScaleSaturated(y Int16x8) Uint16x8
+
+// ScaleSaturated shifts each element in x by the signed value of the least significant byte
+// of y's corresponding element (positive shifts left, negative shifts right).
+// Results are saturated to the unsigned range on overflow.
+//
+// Asm: VUQSHL, CPU Feature: NEON
+func (x Uint32x4) ScaleSaturated(y Int32x4) Uint32x4
+
+// ScaleSaturated shifts each element in x by the signed value of the least significant byte
+// of y's corresponding element (positive shifts left, negative shifts right).
+// Results are saturated to the unsigned range on overflow.
+//
+// Asm: VUQSHL, CPU Feature: NEON
+func (x Uint64x2) ScaleSaturated(y Int64x2) Uint64x2
+
 /* SetElem */
 
 // SetElem returns x with the index'th element set to y.
@@ -1766,64 +1936,6 @@ func (x Uint32x4) ShiftAllRight(y uint64) Uint32x4
 //
 // Asm: VUSHL, CPU Feature: NEON
 func (x Uint64x2) ShiftAllRight(y uint64) Uint64x2
-
-/* ShiftSaturated */
-
-// ShiftSaturated shifts each element in x by the signed value of the least significant byte
-// of y's corresponding element (positive shifts left, negative shifts right).
-// Results are saturated to the signed range on overflow.
-//
-// Asm: VSQSHL, CPU Feature: NEON
-func (x Int8x16) ShiftSaturated(y Int8x16) Int8x16
-
-// ShiftSaturated shifts each element in x by the signed value of the least significant byte
-// of y's corresponding element (positive shifts left, negative shifts right).
-// Results are saturated to the signed range on overflow.
-//
-// Asm: VSQSHL, CPU Feature: NEON
-func (x Int16x8) ShiftSaturated(y Int16x8) Int16x8
-
-// ShiftSaturated shifts each element in x by the signed value of the least significant byte
-// of y's corresponding element (positive shifts left, negative shifts right).
-// Results are saturated to the signed range on overflow.
-//
-// Asm: VSQSHL, CPU Feature: NEON
-func (x Int32x4) ShiftSaturated(y Int32x4) Int32x4
-
-// ShiftSaturated shifts each element in x by the signed value of the least significant byte
-// of y's corresponding element (positive shifts left, negative shifts right).
-// Results are saturated to the signed range on overflow.
-//
-// Asm: VSQSHL, CPU Feature: NEON
-func (x Int64x2) ShiftSaturated(y Int64x2) Int64x2
-
-// ShiftSaturated shifts each element in x by the signed value of the least significant byte
-// of y's corresponding element (positive shifts left, negative shifts right).
-// Results are saturated to the unsigned range on overflow.
-//
-// Asm: VUQSHL, CPU Feature: NEON
-func (x Uint8x16) ShiftSaturated(y Int8x16) Uint8x16
-
-// ShiftSaturated shifts each element in x by the signed value of the least significant byte
-// of y's corresponding element (positive shifts left, negative shifts right).
-// Results are saturated to the unsigned range on overflow.
-//
-// Asm: VUQSHL, CPU Feature: NEON
-func (x Uint16x8) ShiftSaturated(y Int16x8) Uint16x8
-
-// ShiftSaturated shifts each element in x by the signed value of the least significant byte
-// of y's corresponding element (positive shifts left, negative shifts right).
-// Results are saturated to the unsigned range on overflow.
-//
-// Asm: VUQSHL, CPU Feature: NEON
-func (x Uint32x4) ShiftSaturated(y Int32x4) Uint32x4
-
-// ShiftSaturated shifts each element in x by the signed value of the least significant byte
-// of y's corresponding element (positive shifts left, negative shifts right).
-// Results are saturated to the unsigned range on overflow.
-//
-// Asm: VUQSHL, CPU Feature: NEON
-func (x Uint64x2) ShiftSaturated(y Int64x2) Uint64x2
 
 /* Sqrt */
 

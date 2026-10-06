@@ -15,6 +15,7 @@ import (
 	"cmd/compile/internal/ssa/block"
 	"cmd/compile/internal/ssa/ssabase"
 	"cmd/compile/internal/ssa/ssaop"
+	"cmd/compile/internal/stats"
 	"cmd/compile/internal/typecheck"
 	"cmd/compile/internal/types"
 	"cmd/internal/obj"
@@ -37,6 +38,7 @@ type Func struct {
 	bid IDAlloc // block ID allocator
 	vid IDAlloc // value ID allocator
 
+	HTMLWriter     HTMLWriter
 	FatalCleanup   func()         // cleanup function to run before reporting a fatal error
 	PrintOrHtmlSSA bool           // true if GOSSAFUNC matches, true even if fe.Log() (spew phase results to stdout) is false.  There's an odd dependence on this in debug.go for method logf.
 	RuleMatches    map[string]int // number of times countRule was called during compilation for any given string
@@ -148,6 +150,15 @@ func (c *Config) NewFunc(fe Frontend, cache *Cache) *Func {
 	}
 }
 
+func (f *Func) NewStats(prefix string) *stats.PrefixStats {
+	fef := f.Fe.Func()
+	if fef == nil {
+		return nil
+	}
+	s := fef.Stats
+	return s.NewPrefixStat(prefix)
+}
+
 // NumBlocks returns an integer larger than the id of any Block in the Func.
 func (f *Func) NumBlocks() int {
 	return f.bid.Num()
@@ -178,13 +189,13 @@ func (f *Func) RetSparseSet(ss *SparseSet) {
 }
 
 // NewSparseMap returns a sparse map that can store at least up to n integers.
-func (f *Func) NewSparseMap(n int) *sparseMap {
+func (f *Func) NewSparseMap(n int) *SparseMap {
 	return f.Cache.AllocSparseMap(n)
 }
 
 // RetSparseMap returns a sparse map to the config's cache of sparse
 // sets to be reused by f.newSparseMap.
-func (f *Func) RetSparseMap(ss *sparseMap) {
+func (f *Func) RetSparseMap(ss *SparseMap) {
 	f.Cache.FreeSparseMap(ss)
 }
 

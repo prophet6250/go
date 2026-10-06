@@ -696,6 +696,19 @@ func writeType(t *types.Type) *obj.LSym {
 	}
 
 	if s.Siggen() {
+		// The descriptor has already been written. If it was written for a
+		// noalg instance of the same type, it left out the algorithms this
+		// instance needs, so fill them in, including TFlagRegularMemory.
+		if lsym.WeakDef() && !types.TypeHasNoAlg(t) {
+			lsym.Set(obj.AttrWeakDef, false)
+			if eqfunc := geneq(t); eqfunc != nil {
+				objw.SymPtr(lsym, int(rttype.Type.OffsetOf("Equal")), eqfunc, 0)
+			}
+			if types.AlgType(t) == types.AMEM {
+				off := int(rttype.Type.OffsetOf("TFlag"))
+				objw.Uint8(lsym, off, lsym.P[off]|uint8(abi.TFlagRegularMemory))
+			}
+		}
 		return lsym
 	}
 	s.SetSiggen(true)
@@ -919,16 +932,23 @@ func writeType(t *types.Type) *obj.LSym {
 		dextratype(lsym, B, t, dataAdd)
 	}
 
-	// Note: DUPOK is required to ensure that we don't end up with more
-	// than one type descriptor for a given type, if the type descriptor
-	// can be defined in multiple packages, that is, unnamed types,
-	// instantiated types and shape types.
 	dupok := 0
-	if tbase.Sym() == nil || tbase.IsFullyInstantiated() || tbase.HasShape() {
+	if TypeCanBeDupok(tbase) {
 		dupok = obj.DUPOK
 	}
 
 	objw.Global(lsym, int32(E), int16(dupok|obj.RODATA))
+
+	// A noalg type gets a descriptor without the type's hash and equality
+	// algorithms, because this package has no use for them. Another package
+	// may well have one, and emit a descriptor for the same type that does
+	// link them. Both describe the same type and carry the same name, so
+	// mark this one weak: the descriptor with the algorithms is usable
+	// everywhere this one is, and has to be the one the linker keeps.
+	// See cmd/internal/obj.AttrWeakDef.
+	if types.TypeHasNoAlg(t) {
+		lsym.Set(obj.AttrWeakDef, true)
+	}
 
 	// The linker will leave a table of all the typelinks for
 	// types in the binary, so the runtime can find them.
@@ -976,6 +996,16 @@ func NeedRuntimeType(t *types.Type) {
 	if _, ok := signatset[t]; !ok {
 		signatset[t] = struct{}{}
 		signatslice = append(signatslice, typeAndStr{t: t, short: types.TypeSymName(t), regular: t.String()})
+	}
+}
+
+// ForEachRuntimeType calls fn for each type for which a runtime type descriptor
+// has been requested. This is used by the code that indexes symbols early, so
+// we can recursively index the symbols WriteRuntimeTypes numbers using the
+// recursive writeType function.
+func ForEachRuntimeType(fn func(*types.Type)) {
+	for _, ts := range signatslice {
+		fn(ts.t)
 	}
 }
 
@@ -1321,6 +1351,12 @@ func ZeroAddr(size int64) ir.Node {
 	return typecheck.Expr(typecheck.NodAddr(x))
 }
 
+// TypeCanBeDupok reports whether the type descriptor can be defined in multiple packages:
+// that is, unnamed types, instantiated types and shape types.
+func TypeCanBeDupok(t *types.Type) bool {
+	return t.Sym() == nil || t.IsFullyInstantiated() || t.HasShape()
+}
+
 // NeedEmit reports whether typ is a type that we need to emit code
 // for (e.g., runtime type descriptors, method wrappers).
 func NeedEmit(typ *types.Type) bool {
@@ -1403,8 +1439,8 @@ func methodWrapper(rcvr *types.Type, method *types.Field, forItab bool) *obj.LSy
 		rcvr = rcvr.PtrTo()
 	}
 
-	newnam := ir.MethodSym(rcvr, method.Sym)
-	lsym := newnam.Linksym()
+	sym, _ := ir.MethodSym(rcvr, method)
+	lsym := sym.Linksym()
 
 	// Unified IR creates its own wrappers.
 	return lsym

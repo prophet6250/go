@@ -155,10 +155,6 @@ nocgo:
 
 	BL	runtime·check(SB)
 
-#ifdef GOOS_windows
-	BL	runtime·wintls(SB)
-#endif
-
 	// Check that CPU we use for execution supports instructions targeted during compile-time.
 #ifdef CHECK_GOARM64_LSE
 	// Read the ID_AA64ISAR0_EL1 register
@@ -333,9 +329,8 @@ TEXT runtime·systemstack_switch(SB), NOSPLIT, $0-0
 TEXT runtime·systemstack(SB), NOSPLIT, $0-8
 #ifdef GOEXPERIMENT_runtimesecret
 	MOVW	g_secret(g), R3
-	CBZ		R3, nosecret
-	BL 		·secretEraseRegisters(SB)
-
+	CBZ	R3, nosecret
+	BL	·secretEraseRegisters(SB)
 nosecret:
 #endif
 	MOVD	fn+0(FP), R3	// R3 = fn
@@ -784,7 +779,7 @@ TEXT ·asmcgocall(SB),NOSPLIT,$0-20
 	// secret code and clear our registers if so.
 #ifdef GOEXPERIMENT_runtimesecret
 	MOVW 	g_secret(g), R5
-	CBZ		R5, nosecret
+	CBZ	R5, nosecret
 	BL 	·secretEraseRegisters(SB)
 	// restore g0 back into R3
 	MOVD	g_m(g), R3

@@ -52,7 +52,7 @@ func ifEffect(b *ssa.Block) (features ssa.CPUfeatures, taken int) {
 		return
 	}
 	sym := addr.Aux.(*obj.LSym)
-	if sym.Name != "internal/cpu.X86" {
+	if sym.Name != "internal/cpu.X86" && sym.Name != "internal/cpu.ARM64" {
 		return
 	}
 	o := offPtr.AuxInt
@@ -104,7 +104,12 @@ func ifEffect(b *ssa.Block) (features ssa.CPUfeatures, taken int) {
 	case "HasBMI2":
 		features = ssa.CPUvbmi2
 
+	case "HasSVE2":
+		features = ssa.CPUsve2
+
 		// Features that are not currently interesting to the compiler.
+	// HasSVE is not among them: rules only ever upgrade an SVE lowering to an
+	// SVE2 encoding, so baseline SVE is never a rule condition.
 	case "HasAES", "HasADX", "HasERMS", "HasFSRM", "HasFMA", "HasGFNI", "HasOSXSAVE",
 		"HasPCLMULQDQ", "HasPOPCNT", "HasRDTSCP", "HasSHA",
 		"HasSSE3", "HasSSSE3", "HasSSE41", "HasSSE42":
@@ -116,10 +121,21 @@ func ifEffect(b *ssa.Block) (features ssa.CPUfeatures, taken int) {
 	return
 }
 
+// noCodeValue reports whether v is known to emit no machine code, so
+// that even a SIMD type does not imply the presence of any CPU feature.
+func noCodeValue(v *ssa.Value) bool {
+	switch v.Op {
+	case ssaop.OpZeroSIMD, ssaop.OpPhi, ssaop.OpCopy, ssaop.OpSelectN,
+		ssaop.OpArg, ssaop.OpArgIntReg, ssaop.OpArgFloatReg:
+		return true
+	}
+	return false
+}
+
 func cpufeatures(f *ssa.Func) {
 	arch := f.Config.Ctxt.Arch.Family
 	// TODO there are other SIMD architectures
-	if arch != goarch.AMD64 {
+	if arch != goarch.AMD64 && arch != goarch.ARM64 {
 		return
 	}
 
@@ -128,7 +144,10 @@ func cpufeatures(f *ssa.Func) {
 	effects := make([]localEffect, 1+f.NumBlocks(), 1+f.NumBlocks())
 
 	features := func(t *types.Type) ssa.CPUfeatures {
-		if t.IsSIMD() {
+		if t.IsSIMD() && arch == goarch.AMD64 {
+			// On arm64 a SIMD type implies no feature a rule conditions on:
+			// rules only upgrade SVE lowerings to SVE2 encodings, and using an
+			// SVE type does not imply SVE2.
 			switch t.Size() {
 			case 16, 32:
 				return ssa.CPUavx
@@ -183,6 +202,15 @@ func cpufeatures(f *ssa.Func) {
 			// instruction that would fault if the feature (avx, avx512)
 			// were not present, then assume that the feature is present
 			// for all the instructions in the block, a fault is a fault.
+			if noCodeValue(v) {
+				// v emits no instruction, so its type implies
+				// nothing about the CPU. In particular a
+				// SIMD-typed zero is just a reference to the
+				// fixed all-zeros register and flows freely
+				// through code that must run on machines
+				// without AVX.
+				continue
+			}
 			t := v.Type
 			if t.IsResults() {
 				for i := 0; i < t.NumFields(); i++ {

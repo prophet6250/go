@@ -75,19 +75,26 @@ func (_ Compiler) Compile(f *ssa.Func, htmlWriter ssa.HTMLWriter) {
 		checkFunc(f)
 	}
 	const logMemStats = false
-	for _, p := range passes {
+	// use a pass variable that's shared between individual passes, but tied to
+	// this function. This lets developers set pass.Debug (and other fields) to
+	// some other value inside a pass function, without interfering with other
+	// functions
+	var p ssa.Pass
+	for _, p = range passes {
 		if !f.Config.Optimize && !p.Required || p.Disabled {
 			continue
 		}
 		f.Pass = &p
+		f.HTMLWriter = htmlWriter
 		phaseName = p.Name
 		if f.Log() {
 			f.Logf("  pass %s begin\n", p.Name)
 		}
 		// TODO: capture logging during this pass, add it to the HTML
-		var mStart runtime.MemStats
+		var mStart *runtime.MemStats
 		if logMemStats || p.Mem {
-			runtime.ReadMemStats(&mStart)
+			mStart = new(runtime.MemStats)
+			runtime.ReadMemStats(mStart)
 		}
 
 		if checkEnabled && !f.Scheduled {
@@ -106,8 +113,9 @@ func (_ Compiler) Compile(f *ssa.Func, htmlWriter ssa.HTMLWriter) {
 		tEnd := time.Now()
 
 		// Need something less crude than "Log the whole intermediate result".
-		if f.Log() || htmlWriter != nil {
+		if f.Log() || htmlWriter.Enabled() {
 			time := tEnd.Sub(tStart).Nanoseconds()
+			time -= htmlWriter.TimeFormatting().Nanoseconds()
 			var stats string
 			if logMemStats {
 				var mEnd runtime.MemStats
@@ -425,6 +433,8 @@ var passes = [...]ssa.Pass{
 	{Name: "early fuse", Fn: fuseEarly},
 	{Name: "expand calls", Fn: expandCalls, Required: true},
 	{Name: "decompose builtin", Fn: postExpandCallsDecompose, Required: true},
+	{Name: "mem2reg", Fn: mem2reg},
+	{Name: "ptr stats", Fn: ptrStats},
 	{Name: "softfloat", Fn: softfloat, Required: true},
 	{Name: "branchelim", Fn: branchelim},
 	{Name: "late opt", Fn: opt, Required: true},

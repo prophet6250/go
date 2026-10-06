@@ -101,6 +101,7 @@ type CmdFlags struct {
 	Dynlink            *bool        "help:\"support references to Go symbols defined in other shared libraries\"" // &Ctxt.Flag_dynlink, set below
 	EmbedCfg           func(string) "help:\"read go:embed configuration from `file`\""
 	Env                func(string) "help:\"add `definition` of the form key=value to environment\""
+	ExportFD           int          "help:\"write a byte to file descriptor `fd` once the export data has been written\""
 	GenDwarfInl        int          "help:\"generate DWARF inline info records\"" // 0=disabled, 1=funcs, 2=funcs+formals/locals
 	GoVersion          string       "help:\"required version of the runtime\""
 	ImportCfg          func(string) "help:\"read import configuration from `file`\""
@@ -121,6 +122,7 @@ type CmdFlags struct {
 	Shared             *bool        "help:\"generate code that can be linked into a shared library\"" // &Ctxt.Flag_shared, set below
 	SmallFrames        bool         "help:\"reduce the size limit for stack allocated objects\""      // small stacks, to diagnose GC latency; see golang.org/issue/27732
 	Spectre            string       "help:\"enable spectre mitigations in `list` (all, index, ret)\""
+	Stats              bool         "help:\"print compiler statistics\""
 	Std                bool         "help:\"compiling standard library\""
 	SymABIs            string       "help:\"read symbol ABIs from `file`\""
 	TraceProfile       string       "help:\"write an execution trace to `file`\""
@@ -359,6 +361,9 @@ func ParseFlags() {
 
 	if Flag.LowerC < 1 {
 		log.Fatalf("-c must be at least 1, got %d", Flag.LowerC)
+	}
+	if Flag.ExportFD > 0 && Flag.LinkObj == "" {
+		log.Fatalf("-exportfd requires -linkobj")
 	}
 	if !concurrentBackendAllowed() {
 		Flag.LowerC = 1

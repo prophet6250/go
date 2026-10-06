@@ -527,6 +527,14 @@ func Arm64ConditionalParamsToAuxInt(v Arm64ConditionalParams) int64 {
 	return i
 }
 
+type Int64Aux int64
+
+func (Int64Aux) CanBeAnSSAAux() {}
+
+func Int64ToAux(v int64) Aux {
+	return Int64Aux(v)
+}
+
 // encodes the lsb and width for arm(64) bitfield ops into the expected auxInt format.
 func ArmBFAuxInt(lsb, width int64) Arm64BitField {
 	if lsb < 0 || lsb > 63 {
@@ -1238,22 +1246,6 @@ func MergeSym(x, y Sym) Sym {
 		return x
 	}
 	panic(fmt.Sprintf("mergeSym with two non-nil syms %v %v", x, y))
-}
-
-func ModularMultiplicativeInverse(x uint64) (y uint64) {
-	if x%2 != 1 {
-		panic("even numbers in a power-of-two modulus do not have a multiplicative inverse")
-	}
-	// we start with 3 bits of precision because each odd number is its own multiplicative inverse mod 8
-	y = x // 3 bits
-
-	// now use the Newton-Raphson method to double the number of correct bits in each iteration.
-	y *= 2 - x*y // 6 bits
-	y *= 2 - x*y // 12 bits
-	y *= 2 - x*y // 24 bits
-	y *= 2 - x*y // 48 bits
-	y *= 2 - x*y // 96 bits; good enough
-	return
 }
 
 // MoveSize returns the number of bytes an aligned MOV instruction moves.

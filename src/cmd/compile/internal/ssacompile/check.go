@@ -223,8 +223,14 @@ func checkFunc(f *ssa.Func) {
 			case ssaop.AuxTypePanicBoundsC, ssaop.AuxTypePanicBoundsCC:
 				canHaveAux = true
 				canHaveAuxInt = true
+			case ssaop.AuxTypeSizeAndAlign:
+				if _, ok := v.Aux.(ssa.Int64Aux); !ok {
+					f.Fatalf("value %v has Aux type %T, want Int64Aux", v, v.Aux)
+				}
+				canHaveAux = true
+				canHaveAuxInt = true
 			default:
-				f.Fatalf("unknown aux type for %s", v.Op)
+				f.Fatalf("unknown aux type %T for %s", ssaop.OpcodeTable[v.Op].AuxType, v.Op)
 			}
 			if !canHaveAux && v.Aux != nil {
 				f.Fatalf("value %s has an Aux value %v but shouldn't", v.LongString(), v.Aux)
@@ -447,27 +453,23 @@ func checkFunc(f *ssa.Func) {
 	}
 
 	// Check to make sure all args dominate uses.
-	if f.RegAlloc == nil {
-		// Note: regalloc introduces non-dominating args.
-		// See TODO in regalloc.go.
-		sdom := f.Sdom()
-		for _, b := range f.Blocks {
-			for _, v := range b.Values {
-				for i, arg := range v.Args {
-					x := arg.Block
-					y := b
-					if v.Op == ssaop.OpPhi {
-						y = b.Preds[i].B
-					}
-					if !domCheck(f, sdom, x, y) {
-						f.Fatalf("arg %d of value %s does not dominate, arg=%s", i, v.LongString(), arg.LongString())
-					}
+	sdom := f.Sdom()
+	for _, b := range f.Blocks {
+		for _, v := range b.Values {
+			for i, arg := range v.Args {
+				x := arg.Block
+				y := b
+				if v.Op == ssaop.OpPhi {
+					y = b.Preds[i].B
+				}
+				if !domCheck(f, sdom, x, y) {
+					f.Fatalf("arg %d of value %s does not dominate, arg=%s", i, v.LongString(), arg.LongString())
 				}
 			}
-			for _, c := range b.ControlValues() {
-				if !domCheck(f, sdom, c.Block, b) {
-					f.Fatalf("control value %s for %s doesn't dominate", c, b)
-				}
+		}
+		for _, c := range b.ControlValues() {
+			if !domCheck(f, sdom, c.Block, b) {
+				f.Fatalf("control value %s for %s doesn't dominate", c, b)
 			}
 		}
 	}

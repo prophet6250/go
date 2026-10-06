@@ -54,6 +54,7 @@ var (
 	scanbytes  []byte
 	scanraw    RawBytes
 	scanint    int
+	scanint64  int64
 	scanuint8  uint8
 	scanuint16 uint16
 	scanbool   bool
@@ -71,6 +72,9 @@ func conversionTests() []conversionTest {
 		// Exact conversions (destination pointer type matches source type)
 		{s: "foo", d: &scanstr, wantstr: "foo"},
 		{s: 123, d: &scanint, wantint: 123},
+		{s: int64(123), d: &scanint64, wantint: 123},
+		{s: int64(123), d: &scanint, wantint: 123},
+		{s: int64(-123), d: &scanint, wantint: -123},
 		{s: someTime, d: &scantime, wanttime: someTime},
 
 		// To strings
@@ -410,7 +414,7 @@ func TestRawBytesAllocs(t *testing.T) {
 	// So only care on amd64 gc for now.
 	measureAllocs := false
 	switch runtime.GOARCH {
-	case "amd64", "arm64":
+	case "amd64", "arm64", "loong64":
 		measureAllocs = runtime.Compiler == "gc"
 	}
 

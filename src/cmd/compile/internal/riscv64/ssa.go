@@ -17,6 +17,7 @@ import (
 	"cmd/internal/obj"
 	"cmd/internal/obj/riscv"
 	"internal/abi"
+	"internal/buildcfg"
 )
 
 // ssaRegToReg maps ssa register numbers to obj register numbers.
@@ -372,6 +373,41 @@ func ssaGenValue(s *ssagen.State, v *ssa.Value) {
 		nop := s.Prog(obj.ANOP)
 		p3.To.SetTarget(nop)
 		p5.To.SetTarget(nop)
+
+	case ssaop.OpRISCV64LoweredRoundToEvenD, ssaop.OpRISCV64LoweredRoundD, ssaop.OpRISCV64LoweredFloorD, ssaop.OpRISCV64LoweredCeilD, ssaop.OpRISCV64LoweredTruncD:
+		rm := riscv.RM_RNE
+		switch v.Op {
+		case ssaop.OpRISCV64LoweredRoundD:
+			rm = riscv.RM_RMM
+		case ssaop.OpRISCV64LoweredFloorD:
+			rm = riscv.RM_RDN
+		case ssaop.OpRISCV64LoweredCeilD:
+			rm = riscv.RM_RUP
+		case ssaop.OpRISCV64LoweredTruncD:
+			rm = riscv.RM_RTZ
+		}
+		arg := v.Args[0].Reg()
+		out := v.Reg()
+
+		p := s.Prog(riscv.AFCVTLD)
+		p.Scond = riscv.RoundingModeSuffix(rm)
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = arg
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = riscv.REG_TMP
+
+		p = s.Prog(riscv.AFCVTDL)
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = riscv.REG_TMP
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = out
+
+		p = s.Prog(riscv.AFSGNJD)
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = arg
+		p.Reg = out
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = out
 
 	case ssaop.OpRISCV64LoweredMuluhilo:
 		r0 := v.Args[0].Reg()
@@ -772,12 +808,19 @@ func ssaGenValue(s *ssagen.State, v *ssa.Value) {
 		p.To.Reg = v.Args[0].Reg()
 		p.RegTo2 = riscv.REG_ZERO
 
+	case ssaop.OpRISCV64LoweredAtomicAnd32value, ssaop.OpRISCV64LoweredAtomicAnd64value,
+		ssaop.OpRISCV64LoweredAtomicOr32value, ssaop.OpRISCV64LoweredAtomicOr64value:
+		p := s.Prog(v.Op.Asm())
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = v.Args[1].Reg()
+		p.To.Type = obj.TYPE_MEM
+		p.To.Reg = v.Args[0].Reg()
+		p.RegTo2 = v.Reg0()
+
 	case ssaop.OpRISCV64LoweredZero:
 		ptr := v.Args[0].Reg()
-		sc := v.AuxValAndOff()
-		n := sc.Val64()
-
-		mov, sz := largestMove(sc.Off64())
+		n, align := v.AuxSizeAndAlign()
+		mov, sz := largestMove(align)
 
 		// mov	ZERO, (offset)(Rarg0)
 		var off int64
@@ -799,9 +842,8 @@ func ssaGenValue(s *ssagen.State, v *ssa.Value) {
 
 	case ssaop.OpRISCV64LoweredZeroLoop:
 		ptr := v.Args[0].Reg()
-		sc := v.AuxValAndOff()
-		n := sc.Val64()
-		mov, sz := largestMove(sc.Off64())
+		n, align := v.AuxSizeAndAlign()
+		mov, sz := largestMove(align)
 		chunk := 8 * sz
 
 		if n <= 3*chunk {
@@ -810,9 +852,21 @@ func ssaGenValue(s *ssagen.State, v *ssa.Value) {
 
 		tmp := v.RegTmp()
 
+		if n >= 1<<31 {
+			p := s.Prog(riscv.AMOV)
+			p.From.Type = obj.TYPE_CONST
+			p.From.Offset = n - n%chunk
+			p.To.Type = obj.TYPE_REG
+			p.To.Reg = tmp
+		}
 		p := s.Prog(riscv.AADD)
-		p.From.Type = obj.TYPE_CONST
-		p.From.Offset = n - n%chunk
+		if n >= 1<<31 {
+			p.From.Type = obj.TYPE_REG
+			p.From.Reg = tmp
+		} else {
+			p.From.Type = obj.TYPE_CONST
+			p.From.Offset = n - n%chunk
+		}
 		p.Reg = ptr
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = tmp
@@ -861,9 +915,8 @@ func ssaGenValue(s *ssagen.State, v *ssa.Value) {
 			break
 		}
 
-		sa := v.AuxValAndOff()
-		n := sa.Val64()
-		mov, sz := largestMove(sa.Off64())
+		n, align := v.AuxSizeAndAlign()
+		mov, sz := largestMove(align)
 
 		var off int64
 		tmp := int16(riscv.REG_X5)
@@ -890,9 +943,8 @@ func ssaGenValue(s *ssagen.State, v *ssa.Value) {
 			break
 		}
 
-		sc := v.AuxValAndOff()
-		n := sc.Val64()
-		mov, sz := largestMove(sc.Off64())
+		n, align := v.AuxSizeAndAlign()
+		mov, sz := largestMove(align)
 		chunk := 8 * sz
 
 		if n <= 3*chunk {
@@ -900,9 +952,21 @@ func ssaGenValue(s *ssagen.State, v *ssa.Value) {
 		}
 		tmp := int16(riscv.REG_X5)
 
+		if n >= 1<<31 {
+			p := s.Prog(riscv.AMOV)
+			p.From.Type = obj.TYPE_CONST
+			p.From.Offset = n - n%chunk
+			p.To.Type = obj.TYPE_REG
+			p.To.Reg = riscv.REG_X6
+		}
 		p := s.Prog(riscv.AADD)
-		p.From.Type = obj.TYPE_CONST
-		p.From.Offset = n - n%chunk
+		if n >= 1<<31 {
+			p.From.Type = obj.TYPE_REG
+			p.From.Reg = riscv.REG_X6
+		} else {
+			p.From.Type = obj.TYPE_CONST
+			p.From.Offset = n - n%chunk
+		}
 		p.Reg = src
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = riscv.REG_X6
@@ -1067,6 +1131,46 @@ func ssaGenBlock(s *ssagen.State, b, next *ssa.Block) {
 			}
 			p.From.Reg = b.Controls[0].Reg()
 		}
+
+	case block.BlockRISCV64JUMPTABLE:
+		// Jump table:
+		// TMP = base + index*8 (SH3ADD if Zba else SLLI+ADD).
+		// Load slot into TMP, then indirect JMP through TMP.
+		var p *obj.Prog
+		if buildcfg.GORISCV64 >= 22 {
+			p = s.Prog(riscv.ASH3ADD)
+			p.From.Type = obj.TYPE_REG
+			p.From.Reg = b.Controls[1].Reg()
+			p.Reg = b.Controls[0].Reg()
+			p.To.Type = obj.TYPE_REG
+			p.To.Reg = riscv.REG_TMP
+		} else {
+			p = s.Prog(riscv.ASLLI)
+			p.From.Type = obj.TYPE_CONST
+			p.From.Offset = 3
+			p.Reg = b.Controls[0].Reg()
+			p.To.Type = obj.TYPE_REG
+			p.To.Reg = riscv.REG_TMP
+
+			p = s.Prog(riscv.AADD)
+			p.From.Type = obj.TYPE_REG
+			p.From.Reg = riscv.REG_TMP
+			p.Reg = b.Controls[1].Reg()
+			p.To.Type = obj.TYPE_REG
+			p.To.Reg = riscv.REG_TMP
+		}
+
+		p = s.Prog(riscv.AMOV)
+		p.From.Type = obj.TYPE_MEM
+		p.From.Reg = riscv.REG_TMP
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = riscv.REG_TMP
+
+		p = s.Prog(obj.AJMP)
+		p.To.Type = obj.TYPE_MEM
+		p.To.Reg = riscv.REG_TMP
+		// Save jump tables for later resolution of the target blocks.
+		s.JumpTables = append(s.JumpTables, b)
 
 	default:
 		b.Fatalf("Unhandled block: %s", b.LongString())

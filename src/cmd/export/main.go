@@ -48,7 +48,6 @@ func usage() {
 // config defines the JSON schema of the file passed by 'go list -export'.
 type config struct {
 	ImportPath  string            // package path
-	Compiler    string            // gc or gccgo, provided to makeTypesImporter
 	GoVersion   string            // minimum required Go version, such as "go1.21.0"
 	GoFiles     []string          // absolute paths to package source files
 	ImportMap   map[string]string // maps import path to package path
@@ -84,7 +83,13 @@ func export(configFile string) error {
 	fset := token.NewFileSet()
 	var files []*ast.File
 	for _, name := range cfg.GoFiles {
-		f, err := parser.ParseFile(fset, name, nil, parser.SkipObjectResolution)
+		// cmd/compile prefixes paths in std with "$GOROOT"; do the same here.
+		src, err := os.ReadFile(name)
+		if err != nil {
+			return err
+		}
+		name = objabi.AbsFile("", name, "") // name is an absolute path
+		f, err := parser.ParseFile(fset, name, src, parser.SkipObjectResolution)
 		if err != nil {
 			return err
 		}
@@ -92,7 +97,7 @@ func export(configFile string) error {
 	}
 	tc := &types.Config{
 		Importer:  makeTypesImporter(cfg, fset),
-		Sizes:     types.SizesFor(cfg.Compiler, build.Default.GOARCH),
+		Sizes:     types.SizesFor("gc", build.Default.GOARCH),
 		GoVersion: cfg.GoVersion,
 	}
 	pkg, err := tc.Check(cfg.ImportPath, fset, files, nil)
@@ -129,8 +134,10 @@ func readConfig(filename string) (*config, error) {
 
 func makeTypesImporter(cfg *config, fset *token.FileSet) types.Importer {
 	imports := make(map[string]*types.Package)
-	imports["unsafe"] = types.Unsafe
 	return importerFunc(func(importPath string) (*types.Package, error) {
+		if importPath == "unsafe" {
+			return types.Unsafe, nil
+		}
 		pkgPath, ok := cfg.ImportMap[importPath]
 		if !ok {
 			return nil, fmt.Errorf("can't resolve import %s", importPath)

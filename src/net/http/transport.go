@@ -11,8 +11,6 @@ package http
 
 import (
 	"bufio"
-	"compress/flate"
-	"compress/gzip"
 	"container/list"
 	"context"
 	"crypto/tls"
@@ -26,6 +24,7 @@ import (
 	"net/http/httptrace"
 	"net/http/internal"
 	"net/http/internal/ascii"
+	"net/http/internal/httpcommon"
 	"net/textproto"
 	"net/url"
 	"reflect"
@@ -92,7 +91,7 @@ const DefaultMaxIdleConnsPerHost = 2
 // if the connection has already been used successfully and if the
 // request is idempotent and either has no body or has its [Request.GetBody]
 // defined. HTTP requests are considered idempotent if they have HTTP methods
-// GET, HEAD, OPTIONS, or TRACE; or if their [Header] map contains an
+// GET, HEAD, OPTIONS, TRACE, or QUERY; or if their [Header] map contains an
 // "Idempotency-Key" or "X-Idempotency-Key" entry. If the idempotency key
 // value is a zero-length slice, the request is treated as idempotent but the
 // header is not sent on the wire.
@@ -102,9 +101,6 @@ type Transport struct {
 	idleConn     map[connectMethodKey][]*persistConn // most recently used at end
 	idleConnWait map[connectMethodKey]wantConnQueue  // waiting getConns
 	idleLRU      connLRU
-
-	reqMu       sync.Mutex
-	reqCanceler map[*Request]context.CancelCauseFunc
 
 	altMu    sync.Mutex   // guards changing altProto only
 	altProto atomic.Value // of nil or map[string]RoundTripper, key is URI scheme
@@ -420,7 +416,8 @@ type dialClientConner interface {
 type closeIdleConnectionser interface {
 	// CloseIdleConnections is called by Transport.CloseIdleConnections.
 	//
-	// We expect to use this on transports supplied by x/net/http2 or x/net/http3.
+	// We expect to use this on transports supplied by x/net/http2 or
+	// internal/http3.
 	//
 	// The transport will close idle connections created with DialClientConn
 	// before calling this method. The HTTP/3 transport should not attempt to
@@ -467,7 +464,7 @@ func (t *Transport) onceSetNextProtoDefaults() {
 	if !protocols.HTTP2() && !protocols.UnencryptedHTTP2() {
 		return
 	}
-	if omitBundledHTTP2 {
+	if omitHTTP2Client {
 		return
 	}
 
@@ -681,12 +678,6 @@ func (t *Transport) roundTrip(req *Request) (_ *Response, err error) {
 		go awaitLegacyCancel(ctx, cancel, origReq)
 	}
 
-	// Convert Transport.CancelRequest into context cancellation.
-	//
-	// This is lamentably expensive. CancelRequest has been deprecated for a long time
-	// and doesn't work on HTTP/2 requests. Perhaps we should drop support for it entirely.
-	cancel = t.prepareTransportCancel(origReq, cancel)
-
 	defer func() {
 		if err != nil {
 			cancel(err)
@@ -728,8 +719,7 @@ func (t *Transport) roundTrip(req *Request) (_ *Response, err error) {
 		}
 		if err == nil {
 			if pconn.alt != nil {
-				// HTTP/2 requests are not cancelable with CancelRequest,
-				// so we have no further need for the request context.
+				// We have no further need for the request context.
 				//
 				// On the HTTP/1 path, roundTrip takes responsibility for
 				// canceling the context after the response body is read.
@@ -993,48 +983,17 @@ func (t *Transport) CloseIdleConnections() {
 	if t2 := t.closeIdleFunc; t2 != nil {
 		t2.CloseIdleConnections()
 	}
-	// HTTP/3 transport, probably from x/net/http3.
+	// HTTP/3 transport, probably from internal/http3.
 	if cc, ok := t.h3Transport.(closeIdleConnectionser); ok {
 		cc.CloseIdleConnections()
 	}
 }
 
-// prepareTransportCancel sets up state to convert Transport.CancelRequest into context cancellation.
-func (t *Transport) prepareTransportCancel(req *Request, origCancel context.CancelCauseFunc) context.CancelCauseFunc {
-	// Historically, RoundTrip has not modified the Request in any way.
-	// We could avoid the need to keep a map of all in-flight requests by adding
-	// a field to the Request containing its cancel func, and setting that field
-	// while the request is in-flight. Callers aren't supposed to reuse a Request
-	// until after the response body is closed, so this wouldn't violate any
-	// concurrency guarantees.
-	cancel := func(err error) {
-		origCancel(err)
-		t.reqMu.Lock()
-		delete(t.reqCanceler, req)
-		t.reqMu.Unlock()
-	}
-	t.reqMu.Lock()
-	if t.reqCanceler == nil {
-		t.reqCanceler = make(map[*Request]context.CancelCauseFunc)
-	}
-	t.reqCanceler[req] = cancel
-	t.reqMu.Unlock()
-	return cancel
-}
-
-// CancelRequest cancels an in-flight request by closing its connection.
-// CancelRequest should only be called after [Transport.RoundTrip] has returned.
+// CancelRequest is obsolete and does nothing.
 //
-// Deprecated: Use [Request.WithContext] to create a request with a
-// cancelable context instead. CancelRequest cannot cancel HTTP/2
-// requests. This may become a no-op in a future release of Go.
+// Deprecated: Use [NewRequestWithContext] to create a request with a
+// cancelable context instead.
 func (t *Transport) CancelRequest(req *Request) {
-	t.reqMu.Lock()
-	cancel := t.reqCanceler[req]
-	t.reqMu.Unlock()
-	if cancel != nil {
-		cancel(errRequestCanceled)
-	}
 }
 
 //
@@ -1134,13 +1093,17 @@ func (t *Transport) maxIdleConnsPerHost() int {
 	return DefaultMaxIdleConnsPerHost
 }
 
+func (t *Transport) keepAlivesDisabled() bool {
+	return t.DisableKeepAlives || t.MaxIdleConnsPerHost < 0
+}
+
 // tryPutIdleConn adds pconn to the list of idle persistent connections awaiting
 // a new request.
 // If pconn is no longer needed or not in a good state, tryPutIdleConn returns
 // an error explaining why it wasn't registered.
 // tryPutIdleConn does not close pconn. Use putOrCloseIdleConn instead for that.
 func (t *Transport) tryPutIdleConn(pconn *persistConn) error {
-	if t.DisableKeepAlives || t.MaxIdleConnsPerHost < 0 {
+	if t.keepAlivesDisabled() {
 		return errKeepAlivesDisabled
 	}
 	if pconn.isBroken() {
@@ -1726,10 +1689,14 @@ func (t *Transport) dialConnFor(w *wantConn) {
 
 	const isClientConn = false
 	pc, err := t.dialConn(ctx, w.cm, isClientConn, nil)
+	if err == nil && pc.alt != nil {
+		// HTTP/2 and HTTP/3 connections can be shared.
+		// Add to the idle connection pool before trying to deliver to w.
+		t.putOrCloseIdleConn(pc)
+	}
 	delivered := w.tryDeliver(pc, err, time.Time{})
-	if err == nil && (!delivered || pc.alt != nil) {
-		// pconn was not passed to w,
-		// or it is HTTP/2 and can be shared.
+	if err == nil && !delivered && pc.alt == nil {
+		// HTTP/1 pconn was not passed to w.
 		// Add to the idle connection pool.
 		t.putOrCloseIdleConn(pc)
 	}
@@ -2332,8 +2299,7 @@ func (pc *persistConn) isBroken() bool {
 	return b
 }
 
-// canceled returns non-nil if the connection was closed due to
-// CancelRequest or due to context cancellation.
+// canceled returns non-nil if the connection was closed due to context cancellation.
 func (pc *persistConn) canceled() error {
 	pc.mu.Lock()
 	defer pc.mu.Unlock()
@@ -2443,10 +2409,16 @@ const maxPostCloseReadBytes = 256 << 10
 // has been closed.
 const maxPostCloseReadTime = 50 * time.Millisecond
 
-func maybeDrainBody(body io.Reader) bool {
+func maybeDrainBody(r io.Reader) bool {
 	drainedCh := make(chan bool, 1)
 	go func() {
-		if _, err := io.CopyN(io.Discard, body, maxPostCloseReadBytes+1); err == io.EOF {
+		// When we drain the body and (hopefully) reach EOF, we might
+		// potentially need to deal with trailers. Make sure they are discarded
+		// so the connection can actually be reused.
+		if b, ok := r.(*body); ok {
+			b.discardTrailer()
+		}
+		if _, err := io.CopyN(io.Discard, r, maxPostCloseReadBytes+1); err == io.EOF {
 			drainedCh <- true
 		} else {
 			drainedCh <- false
@@ -2459,6 +2431,14 @@ func maybeDrainBody(body io.Reader) bool {
 		return false
 	}
 }
+
+type bodyReadStatus uint8
+
+const (
+	bodyReadEOF bodyReadStatus = iota
+	bodyReadClosedEarly
+	bodyReadError
+)
 
 func (pc *persistConn) readLoop() {
 	closeErr := errReadLoopExiting // default value, if not changed below
@@ -2578,23 +2558,24 @@ func (pc *persistConn) readLoop() {
 			continue
 		}
 
-		waitForBodyRead := make(chan bool, 2)
+		waitForBodyRead := make(chan bodyReadStatus, 1)
 		body := &bodyEOFSignal{
 			body: resp.Body,
 			earlyCloseFn: func() error {
-				waitForBodyRead <- false
+				waitForBodyRead <- bodyReadClosedEarly
 				<-eofc // will be closed by deferred call at the end of the function
 				return nil
-
 			},
 			fn: func(err error) error {
-				isEOF := err == io.EOF
-				waitForBodyRead <- isEOF
-				if isEOF {
+				if err == io.EOF {
+					waitForBodyRead <- bodyReadEOF
 					<-eofc // see comment above eofc declaration
-				} else if err != nil {
-					if cerr := pc.canceled(); cerr != nil {
-						return cerr
+				} else {
+					waitForBodyRead <- bodyReadError
+					if err != nil {
+						if cerr := pc.canceled(); cerr != nil {
+							return cerr
+						}
 					}
 				}
 				return err
@@ -2603,7 +2584,7 @@ func (pc *persistConn) readLoop() {
 
 		resp.Body = body
 		if rc.addedGzip && ascii.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
-			resp.Body = &gzipReader{body: body}
+			resp.Body = &httpcommon.GzipReader{Body: body}
 			resp.Header.Del("Content-Encoding")
 			resp.Header.Del("Content-Length")
 			resp.ContentLength = -1
@@ -2620,19 +2601,29 @@ func (pc *persistConn) readLoop() {
 		// the bufio.Reader, wait for the caller goroutine to finish
 		// reading the response body. (or for cancellation or death)
 		select {
-		case bodyEOF := <-waitForBodyRead:
-			tryDrain := !bodyEOF && resp.ContentLength <= maxPostCloseReadBytes
-			if tryDrain {
-				eofc <- struct{}{}
-				bodyEOF = maybeDrainBody(body.body)
+		case status := <-waitForBodyRead:
+			tryPutIdle := func() {
+				alive = alive &&
+					!pc.sawEOF &&
+					pc.wroteRequest() &&
+					tryPutIdleConn(rc.treq)
 			}
-			alive = alive &&
-				bodyEOF &&
-				!pc.sawEOF &&
-				pc.wroteRequest() &&
-				tryPutIdleConn(rc.treq)
-			if !tryDrain && bodyEOF {
+			switch status {
+			case bodyReadEOF:
+				tryPutIdle()
 				eofc <- struct{}{}
+			case bodyReadClosedEarly:
+				// Read resp before signaling eofc: the send lets the caller's
+				// Close return, and resp belongs to the caller after that.
+				tryDrain := alive && !pc.t.keepAlivesDisabled() && resp.ContentLength <= maxPostCloseReadBytes
+				eofc <- struct{}{}
+				if tryDrain && maybeDrainBody(body.body) {
+					tryPutIdle()
+				} else {
+					alive = false
+				}
+			case bodyReadError:
+				alive = false
 			}
 		case <-rc.treq.ctx.Done():
 			alive = false
@@ -3205,7 +3196,7 @@ func schemePort(scheme string) string {
 
 func idnaASCIIFromURL(url *url.URL) string {
 	addr := url.Hostname()
-	if v, err := idnaASCII(addr); err == nil {
+	if v, err := idnaASCII(addr); err == nil && v != "" {
 		addr = v
 	}
 	return addr
@@ -3228,20 +3219,19 @@ func canonicalAddr(url *url.URL) string {
 // once, right before its final (error-producing) Read or Close call
 // returns. fn should return the new error to return from Read or Close.
 //
-// If earlyCloseFn is non-nil and Close is called before io.EOF is
-// seen, earlyCloseFn is called instead of fn, and its return value is
+// If earlyCloseFn is non-nil and Close is called before any final error from
+// Read is seen, earlyCloseFn is called instead of fn, and its return value is
 // the return value from Close.
 type bodyEOFSignal struct {
 	body         io.ReadCloser
 	mu           sync.Mutex        // guards following 4 fields
 	closed       bool              // whether Close has been called
 	rerr         error             // sticky Read error
-	fn           func(error) error // err will be nil on Read io.EOF
-	earlyCloseFn func() error      // optional alt Close func used if io.EOF not seen
+	fn           func(error) error // called on final body.Read non-nil error (or body.Close if earlyCloseFn is not run)
+	earlyCloseFn func() error      // called if body.Close is called before body.Read ever returns a non-nil error
 }
 
 var errReadOnClosedResBody = errors.New("http: read on closed response body")
-var errConcurrentReadOnResBody = errors.New("http: concurrent read on response body")
 
 func (es *bodyEOFSignal) Read(p []byte) (n int, err error) {
 	es.mu.Lock()
@@ -3273,8 +3263,16 @@ func (es *bodyEOFSignal) Close() error {
 		return nil
 	}
 	es.closed = true
-	if es.earlyCloseFn != nil && es.rerr != io.EOF {
-		return es.earlyCloseFn()
+	if es.earlyCloseFn != nil && es.rerr == nil {
+		earlyCloseFn := es.earlyCloseFn
+		es.earlyCloseFn = nil
+		es.fn = nil
+		return earlyCloseFn()
+	}
+	if es.rerr != nil && es.rerr != io.EOF {
+		// Read already returned this error and readLoop gave up the
+		// connection. Draining would only read the same error again.
+		return nil
 	}
 	err := es.body.Close()
 	return es.condfn(err)
@@ -3285,120 +3283,10 @@ func (es *bodyEOFSignal) condfn(err error) error {
 	if es.fn == nil {
 		return err
 	}
-	err = es.fn(err)
+	fn := es.fn
 	es.fn = nil
-	return err
-}
-
-// gzipReader wraps a response body so it can lazily
-// get gzip.Reader from the pool on the first call to Read.
-// After Close is called it puts gzip.Reader to the pool immediately
-// if there is no Read in progress or later when Read completes.
-type gzipReader struct {
-	_    incomparable
-	body *bodyEOFSignal // underlying HTTP/1 response body framing
-	mu   sync.Mutex     // guards zr and zerr
-	zr   *gzip.Reader   // stores gzip reader from the pool between reads
-	zerr error          // sticky gzip reader init error or sentinel value to detect concurrent read and read after close
-}
-
-type eofReader struct{}
-
-func (eofReader) Read([]byte) (int, error) { return 0, io.EOF }
-func (eofReader) ReadByte() (byte, error)  { return 0, io.EOF }
-
-var gzipPool = sync.Pool{New: func() any { return new(gzip.Reader) }}
-
-// gzipPoolGet gets a gzip.Reader from the pool and resets it to read from r.
-func gzipPoolGet(r io.Reader) (*gzip.Reader, error) {
-	zr := gzipPool.Get().(*gzip.Reader)
-	if err := zr.Reset(r); err != nil {
-		gzipPoolPut(zr)
-		return nil, err
-	}
-	return zr, nil
-}
-
-// gzipPoolPut puts a gzip.Reader back into the pool.
-func gzipPoolPut(zr *gzip.Reader) {
-	// Reset will allocate bufio.Reader if we pass it anything
-	// other than a flate.Reader, so ensure that it's getting one.
-	var r flate.Reader = eofReader{}
-	zr.Reset(r)
-	gzipPool.Put(zr)
-}
-
-// acquire returns a gzip.Reader for reading response body.
-// The reader must be released after use.
-func (gz *gzipReader) acquire() (*gzip.Reader, error) {
-	gz.mu.Lock()
-	defer gz.mu.Unlock()
-	if gz.zerr != nil {
-		return nil, gz.zerr
-	}
-	if gz.zr == nil {
-		// gzipPoolGet might block indefinitely since it reads the gzip header.
-		// Therefore, drop mu temporarily when using gzipPoolGet.
-		// We set zerr to errConcurrentReadOnResBody to prevent concurrent read
-		// even when mu is temporarily dropped.
-		gz.zerr = errConcurrentReadOnResBody
-		gz.mu.Unlock()
-		zr, err := gzipPoolGet(gz.body)
-		gz.mu.Lock()
-		// Guard against Close being called while gzipPoolGet is running.
-		if gz.zerr != errConcurrentReadOnResBody {
-			if zr != nil {
-				gzipPoolPut(zr)
-			}
-			return nil, gz.zerr
-		}
-		gz.zr, gz.zerr = zr, err
-		if gz.zerr != nil {
-			return nil, gz.zerr
-		}
-	}
-	ret := gz.zr
-	gz.zr, gz.zerr = nil, errConcurrentReadOnResBody
-	return ret, nil
-}
-
-// release returns the gzip.Reader to the pool if Close was called during Read.
-func (gz *gzipReader) release(zr *gzip.Reader) {
-	gz.mu.Lock()
-	defer gz.mu.Unlock()
-	if gz.zerr == errConcurrentReadOnResBody {
-		gz.zr, gz.zerr = zr, nil
-	} else { // errReadOnClosedResBody
-		gzipPoolPut(zr)
-	}
-}
-
-// close returns the gzip.Reader to the pool immediately or
-// signals release to do so after Read completes.
-func (gz *gzipReader) close() {
-	gz.mu.Lock()
-	defer gz.mu.Unlock()
-	if gz.zerr == nil && gz.zr != nil {
-		gzipPoolPut(gz.zr)
-		gz.zr = nil
-	}
-	gz.zerr = errReadOnClosedResBody
-}
-
-func (gz *gzipReader) Read(p []byte) (n int, err error) {
-	zr, err := gz.acquire()
-	if err != nil {
-		return 0, err
-	}
-	defer gz.release(zr)
-
-	return zr.Read(p)
-}
-
-func (gz *gzipReader) Close() error {
-	gz.close()
-
-	return gz.body.Close()
+	es.earlyCloseFn = nil
+	return fn(err)
 }
 
 type tlsHandshakeTimeoutError struct{}

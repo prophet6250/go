@@ -8,10 +8,6 @@
 #include "time_windows.h"
 #include "cgo/abi_amd64.h"
 
-// Offsets into Thread Environment Block (pointer in GS)
-#define TEB_TlsSlots 0x1480
-#define TEB_ArbitraryPtr 0x28
-
 // faster get/set last error
 TEXT runtime·getlasterror(SB),NOSPLIT,$0
 	MOVQ	0x30(GS), AX
@@ -32,6 +28,13 @@ TEXT sigtramp<>(SB),NOSPLIT,$0-0
 	// R14 is cleared in case there's a non-zero value in there
 	// if called from a non-go thread.
 	XORPS	X15, X15
+#ifndef GOAMD64_v3
+#ifndef GOAMD64_v4
+	CMPB	internal∕cpu·X86+const_offsetX86HasAVX(SB), $1
+	JNE	2(PC)
+#endif
+#endif
+	VXORPS	X15, X15, X15
 	XORQ	R14, R14
 
 	get_tls(AX)
@@ -178,10 +181,9 @@ TEXT runtime·tstart_stdcall(SB),NOSPLIT|NOFRAME,$0
 	MOVQ	AX, g_stackguard1(DX)
 
 	// Set up tls.
-	LEAQ	m_tls(CX), DI
 	MOVQ	CX, g_m(DX)
-	MOVQ	DX, g(DI)
-	CALL	runtime·settls(SB) // clobbers CX
+	get_tls(AX)
+	MOVQ	DX, g(AX)
 
 	CALL	runtime·stackcheck(SB)	// clobbers AX,CX
 	CALL	runtime·mstart(SB)
@@ -190,58 +192,9 @@ TEXT runtime·tstart_stdcall(SB),NOSPLIT|NOFRAME,$0
 
 	XORL	AX, AX			// return 0 == success
 	RET
-
-// set tls base to DI
-TEXT runtime·settls(SB),NOSPLIT,$0
-	MOVQ	runtime·tls_g(SB), CX
-	MOVQ	DI, 0(CX)(GS)
-	RET
-
 TEXT runtime·nanotime1(SB),NOSPLIT,$0-8
 	MOVQ	$_INTERRUPT_TIME, DI
 	MOVQ	time_lo(DI), AX
 	IMULQ	$100, AX
 	MOVQ	AX, ret+0(FP)
-	RET
-
-// func osSetupTLS(mp *m)
-// Setup TLS. for use by needm on Windows.
-TEXT runtime·osSetupTLS(SB),NOSPLIT,$0-8
-	MOVQ	mp+0(FP), AX
-	LEAQ	m_tls(AX), DI
-	CALL	runtime·settls(SB)
-	RET
-
-// This is called from rt0_go, which runs on the system stack
-// using the initial stack allocated by the OS.
-TEXT runtime·wintls(SB),NOSPLIT,$0
-	// Allocate a TLS slot to hold g across calls to external code
-	MOVQ	SP, AX
-	ANDQ	$~15, SP	// alignment as per Windows requirement
-	SUBQ	$48, SP	// room for SP and 4 args as per Windows requirement
-			// plus one extra word to keep stack 16 bytes aligned
-	MOVQ	AX, 32(SP)
-	MOVQ	runtime·_TlsAlloc(SB), AX
-	CALL	AX
-	MOVQ	32(SP), SP
-
-	MOVQ	AX, CX	// TLS index
-
-	// Assert that slot is less than 64 so we can use _TEB->TlsSlots
-	CMPQ	CX, $64
-	JB	ok
-
-	// Fallback to the TEB arbitrary pointer.
-	// TODO: don't use the arbitrary pointer (see go.dev/issue/59824)
-	MOVQ	$TEB_ArbitraryPtr, CX
-	JMP	settls
-ok:
-	// Convert the TLS index at CX into
-	// an offset from TEB_TlsSlots.
-	SHLQ	$3, CX
-
-	// Save offset from TLS into tls_g.
-	ADDQ	$TEB_TlsSlots, CX
-settls:
-	MOVQ	CX, runtime·tls_g(SB)
 	RET

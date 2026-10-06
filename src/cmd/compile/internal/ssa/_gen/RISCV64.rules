@@ -39,6 +39,8 @@
 (Select1 (Sub64borrow x y c)) =>
 	(OR (SLTU <typ.UInt64> x s:(SUB <typ.UInt64> x y)) (SLTU <typ.UInt64> s (SUB <typ.UInt64> s c)))
 
+(JumpTable idx) => (JUMPTABLE {ssa.MakeJumpTableSym(b)} idx (MOVaddr <typ.Uintptr> {ssa.MakeJumpTableSym(b)} (SB)))
+
 // (x + y) / 2 => (x / 2) + (y / 2) + (x & y & 1)
 (Avg64u <t> x y) => (ADD (ADD <t> (SRLI <t> [1] x) (SRLI <t> [1] y)) (ANDI <t> [1] (AND <t> x y)))
 
@@ -118,8 +120,9 @@
 
 // Shifts
 
-// SLL only considers the bottom 6 bits of y. If y > 64, the result should
-// always be 0.
+// SLL only considers the bottom 6 bits of y, similarly SLLW only considers the
+// bottom 5 bits of y. Ensure that the result is always zero if the shift exceeds
+// the maximum value.
 //
 // Breaking down the operation:
 //
@@ -128,27 +131,27 @@
 // If y < 64, this is the value we want. Otherwise, we want zero.
 //
 // So, we AND with -1 * uint64(y < 64), which is 0xfffff... if y < 64 and 0 otherwise.
-(Lsh8x8   <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL <t> x y) (Neg8  <t> (SLTIU <t> [64] (ZeroExt8to64  y))))
-(Lsh8x16  <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL <t> x y) (Neg8  <t> (SLTIU <t> [64] (ZeroExt16to64 y))))
-(Lsh8x32  <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL <t> x y) (Neg8  <t> (SLTIU <t> [64] (ZeroExt32to64 y))))
-(Lsh8x64  <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL <t> x y) (Neg8  <t> (SLTIU <t> [64] y)))
-(Lsh16x8  <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL <t> x y) (Neg16 <t> (SLTIU <t> [64] (ZeroExt8to64  y))))
-(Lsh16x16 <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL <t> x y) (Neg16 <t> (SLTIU <t> [64] (ZeroExt16to64 y))))
-(Lsh16x32 <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL <t> x y) (Neg16 <t> (SLTIU <t> [64] (ZeroExt32to64 y))))
-(Lsh16x64 <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL <t> x y) (Neg16 <t> (SLTIU <t> [64] y)))
-(Lsh32x8  <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL <t> x y) (Neg32 <t> (SLTIU <t> [64] (ZeroExt8to64  y))))
-(Lsh32x16 <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL <t> x y) (Neg32 <t> (SLTIU <t> [64] (ZeroExt16to64 y))))
-(Lsh32x32 <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL <t> x y) (Neg32 <t> (SLTIU <t> [64] (ZeroExt32to64 y))))
-(Lsh32x64 <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL <t> x y) (Neg32 <t> (SLTIU <t> [64] y)))
-(Lsh64x8  <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL <t> x y) (Neg64 <t> (SLTIU <t> [64] (ZeroExt8to64  y))))
-(Lsh64x16 <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL <t> x y) (Neg64 <t> (SLTIU <t> [64] (ZeroExt16to64 y))))
-(Lsh64x32 <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL <t> x y) (Neg64 <t> (SLTIU <t> [64] (ZeroExt32to64 y))))
-(Lsh64x64 <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL <t> x y) (Neg64 <t> (SLTIU <t> [64] y)))
+(Lsh8x8   <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL  <t> x y) (Neg8  <t> (SLTIU <t> [64] (ZeroExt8to64  y))))
+(Lsh8x16  <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL  <t> x y) (Neg8  <t> (SLTIU <t> [64] (ZeroExt16to64 y))))
+(Lsh8x32  <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL  <t> x y) (Neg8  <t> (SLTIU <t> [64] (ZeroExt32to64 y))))
+(Lsh8x64  <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL  <t> x y) (Neg8  <t> (SLTIU <t> [64] y)))
+(Lsh16x8  <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL  <t> x y) (Neg16 <t> (SLTIU <t> [64] (ZeroExt8to64  y))))
+(Lsh16x16 <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL  <t> x y) (Neg16 <t> (SLTIU <t> [64] (ZeroExt16to64 y))))
+(Lsh16x32 <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL  <t> x y) (Neg16 <t> (SLTIU <t> [64] (ZeroExt32to64 y))))
+(Lsh16x64 <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL  <t> x y) (Neg16 <t> (SLTIU <t> [64] y)))
+(Lsh32x8  <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLLW <t> x y) (Neg32 <t> (SLTIU <t> [32] (ZeroExt8to64  y))))
+(Lsh32x16 <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLLW <t> x y) (Neg32 <t> (SLTIU <t> [32] (ZeroExt16to64 y))))
+(Lsh32x32 <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLLW <t> x y) (Neg32 <t> (SLTIU <t> [32] (ZeroExt32to64 y))))
+(Lsh32x64 <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLLW <t> x y) (Neg32 <t> (SLTIU <t> [32] y)))
+(Lsh64x8  <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL  <t> x y) (Neg64 <t> (SLTIU <t> [64] (ZeroExt8to64  y))))
+(Lsh64x16 <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL  <t> x y) (Neg64 <t> (SLTIU <t> [64] (ZeroExt16to64 y))))
+(Lsh64x32 <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL  <t> x y) (Neg64 <t> (SLTIU <t> [64] (ZeroExt32to64 y))))
+(Lsh64x64 <t> x y) && !ssa.ShiftIsBounded(v) => (AND (SLL  <t> x y) (Neg64 <t> (SLTIU <t> [64] y)))
 
-(Lsh8x(64|32|16|8)  x y) && ssa.ShiftIsBounded(v) => (SLL x y)
-(Lsh16x(64|32|16|8) x y) && ssa.ShiftIsBounded(v) => (SLL x y)
-(Lsh32x(64|32|16|8) x y) && ssa.ShiftIsBounded(v) => (SLL x y)
-(Lsh64x(64|32|16|8) x y) && ssa.ShiftIsBounded(v) => (SLL x y)
+(Lsh8x(64|32|16|8)  x y) && ssa.ShiftIsBounded(v) => (SLL  x y)
+(Lsh16x(64|32|16|8) x y) && ssa.ShiftIsBounded(v) => (SLL  x y)
+(Lsh32x(64|32|16|8) x y) && ssa.ShiftIsBounded(v) => (SLLW x y)
+(Lsh64x(64|32|16|8) x y) && ssa.ShiftIsBounded(v) => (SLL  x y)
 
 // SRL only considers the bottom 6 bits of y, similarly SRLW only considers the
 // bottom 5 bits of y. Ensure that the result is always zero if the shift exceeds
@@ -376,11 +379,11 @@
 
 // Unroll zeroing in medium size (at most 192 bytes i.e. 3 cachelines)
 (Zero [s] {t} ptr mem) && s <= 24*ssa.MoveSize(t.Alignment(), config) =>
-	(LoweredZero [ssa.MakeValAndOff(int32(s),int32(t.Alignment()))] ptr mem)
+	(LoweredZero [s] {t.Alignment()} ptr mem)
 
 // Generic zeroing uses a loop
 (Zero [s] {t} ptr mem) && s > 24*ssa.MoveSize(t.Alignment(), config) =>
-	(LoweredZeroLoop [ssa.MakeValAndOff(int32(s),int32(t.Alignment()))] ptr mem)
+	(LoweredZeroLoop [s] {t.Alignment()} ptr mem)
 
 // Checks
 (IsNonNil ...) => (SNEZ ...)
@@ -446,12 +449,12 @@
 // Generic move
 (Move [s] {t} dst src mem) && s > 0 && s <= 3*8*ssa.MoveSize(t.Alignment(), config)
 	&& ssa.LogLargeCopyValue(v, s) =>
-	(LoweredMove [ssa.MakeValAndOff(int32(s),int32(t.Alignment()))] dst src mem)
+	(LoweredMove [s] {t.Alignment()} dst src mem)
 
 // Generic move uses a loop
 (Move [s] {t} dst src mem) && s > 3*8*ssa.MoveSize(t.Alignment(), config)
 	&& ssa.LogLargeCopyValue(v, s) =>
-	(LoweredMoveLoop [ssa.MakeValAndOff(int32(s),int32(t.Alignment()))] dst src mem)
+	(LoweredMoveLoop [s] {t.Alignment()} dst src mem)
 
 // Boolean ops; 0=false, 1=true
 (AndB ...) => (AND ...)
@@ -494,6 +497,11 @@
 			(SLLI <typ.UInt64> [3] (ANDI <typ.UInt64> [3] ptr)))) mem)
 
 (AtomicAnd32 ...) => (LoweredAtomicAnd32 ...)
+
+(AtomicAnd32value ...) => (LoweredAtomicAnd32value ...)
+(AtomicAnd64value ...) => (LoweredAtomicAnd64value ...)
+(AtomicOr32value ...) => (LoweredAtomicOr32value ...)
+(AtomicOr64value ...) => (LoweredAtomicOr64value ...)
 
 (AtomicCompareAndSwap32 ptr old new mem) => (LoweredAtomicCas32 ptr (SignExt32to64 old) new mem)
 (AtomicCompareAndSwap64 ...) => (LoweredAtomicCas64 ...)
@@ -590,6 +598,14 @@
 
 // Combine negation and sign extension.
 (MOVWreg (NEG x)) => (NEGW x)
+
+// Avoid extending when already sufficiently shifted.
+(MOVBUreg x:(SRLI  [c] y)) && c >= 56 => x
+(MOVHUreg x:(SRLI  [c] y)) && c >= 48 => x
+(MOVWUreg x:(SRLI  [c] y)) && c >= 32 => x
+(MOVBUreg x:(SRLIW [c] y)) && c >= 24 => x
+(MOVHUreg x:(SRLIW [c] y)) && c >= 16 => x
+(MOVWUreg x:(SRLIW [c] y)) => x
 
 // Avoid sign/zero extension for consts.
 (MOVBreg  (MOVDconst [c])) => (MOVDconst [int64(int8(c))])
@@ -705,6 +721,14 @@
 (SRLI [x] (MOVHUreg y)) && x >= 16 => (MOVDconst [0])
 (SRLI [x] (MOVWUreg y)) && x >= 32 => (MOVDconst [0])
 
+// Remove unnecessary masking with shifts.
+(SLL  x (ANDI [63] y)) => (SLL  x y)
+(SRL  x (ANDI [63] y)) => (SRL  x y)
+(SRA  x (ANDI [63] y)) => (SRA  x y)
+(SLLW x (ANDI [31] y)) => (SLLW x y)
+(SRLW x (ANDI [31] y)) => (SRLW x y)
+(SRAW x (ANDI [31] y)) => (SRAW x y)
+
 // Fold constant into immediate instructions where possible.
 (ADD (MOVDconst <t> [val]) x) && ssa.Is32Bit(val) && !t.IsPtr() => (ADDI [val] x)
 (AND (MOVDconst [val]) x) && ssa.Is32Bit(val) => (ANDI [val] x)
@@ -804,6 +828,16 @@
 // Deadcode for LoweredMuluhilo
 (Select0 m:(LoweredMuluhilo x y)) && m.Uses == 1 => (MULHU x y)
 (Select1 m:(LoweredMuluhilo x y)) && m.Uses == 1 => (MUL x y)
+
+// Optimise bit tests with larger than 12 bit values.
+(S(EQ|NE)Z a:(ANDI [x] y)) && ssa.IsPowerOfTwo(uint64(x)) && !ssa.Is12Bit(x) && a.Uses == 1 => (S(EQ|NE)Z (ANDI <typ.UInt64> [1] (SRLI <typ.UInt64> [ssa.Log64u(uint64(x))] y)))
+(B(EQ|NE)Z a:(ANDI [x] y) yes no) && ssa.IsPowerOfTwo(uint64(x)) && !ssa.Is12Bit(x) && a.Uses == 1 => (B(EQ|NE)Z (ANDI <typ.UInt64> [1] (SRLI <typ.UInt64> [ssa.Log64u(uint64(x))] y)) yes no)
+(S(EQ|NE)Z a:(AND (MOVDconst [x]) y)) && ssa.IsPowerOfTwo(uint64(x)) && !ssa.Is12Bit(x) && a.Uses == 1 => (S(EQ|NE)Z (ANDI <typ.UInt64> [1] (SRLI <typ.UInt64> [ssa.Log64u(uint64(x))] y)))
+(B(EQ|NE)Z a:(AND (MOVDconst [x]) y) yes no) && ssa.IsPowerOfTwo(uint64(x)) && !ssa.Is12Bit(x) && a.Uses == 1 => (B(EQ|NE)Z (ANDI <typ.UInt64> [1] (SRLI <typ.UInt64> [ssa.Log64u(uint64(x))] y)) yes no)
+
+// Combine small shifts into bit tests.
+(S(EQ|NE)Z a:(ANDI [x] (SRLI [y] z))) && ssa.IsPowerOfTwo(uint64(x)) && ssa.Is12Bit(x << y) && a.Uses == 1 => (S(EQ|NE)Z (ANDI <typ.UInt64> [x << y] z))
+(B(EQ|NE)Z a:(ANDI [x] (SRLI [y] z)) yes no) && ssa.IsPowerOfTwo(uint64(x)) && ssa.Is12Bit(x << y) && a.Uses == 1 => (B(EQ|NE)Z (ANDI <typ.UInt64> [x << y] z) yes no)
 
 (FADD(S|D) a (FMUL(S|D) x y)) && a.Block.Func.UseFMA(v) => (FMADD(S|D) x y a)
 (FSUB(S|D) a (FMUL(S|D) x y)) && a.Block.Func.UseFMA(v) => (FNMSUB(S|D) x y a)

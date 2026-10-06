@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
-	"simd/archsimd/internal/test_helpers"
+	"simd/internal/test_helpers"
 	"testing"
 	"unsafe"
 )
@@ -43,6 +43,11 @@ func checkSlices[T number](t *testing.T, got, want []T) bool {
 func checkSlicesLogInput[T number](t *testing.T, got, want []T, flakiness float64, logInput func()) bool {
 	t.Helper()
 	return test_helpers.CheckSlicesLogInput[T](t, got, want, flakiness, logInput)
+}
+
+func checkScalarsLogInput[T number](t *testing.T, got, want T, flakiness float64, logInput func()) bool {
+	t.Helper()
+	return test_helpers.CheckScalarsLogInput[T](t, got, want, flakiness, logInput)
 }
 
 // sliceOf returns a slice n T's, with each

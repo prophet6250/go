@@ -33,7 +33,6 @@ var (
 	Export_writeStatusLine            = writeStatusLine
 	Export_is408Message               = is408Message
 	MaxPostCloseReadTime              = maxPostCloseReadTime
-	ProtocolSetHTTP3                  = protocolSetHTTP3
 )
 
 var MaxWriteWaitBeforeConnReuse = &maxWriteWaitBeforeConnReuse
@@ -61,8 +60,8 @@ func init() {
 }
 
 func CondSkipHTTP2(t testing.TB) {
-	if omitBundledHTTP2 {
-		t.Skip("skipping HTTP/2 test when nethttpomithttp2 build tag in use")
+	if omitHTTP2Server || omitHTTP2Client {
+		t.Skip("skipping HTTP/2 test when HTTP/2 server or client is omitted by build tag")
 	}
 }
 
@@ -104,12 +103,6 @@ func NewTestTimeoutHandler(handler Handler, ctx context.Context) Handler {
 
 func ResetCachedEnvironment() {
 	resetProxyConfig()
-}
-
-func (t *Transport) NumPendingRequestsForTesting() int {
-	t.reqMu.Lock()
-	defer t.reqMu.Unlock()
-	return len(t.reqCanceler)
 }
 
 func (t *Transport) IdleConnKeysForTesting() (keys []string) {
@@ -311,4 +304,9 @@ func SetRSTAvoidanceDelay(t *testing.T, d time.Duration) {
 		rstAvoidanceDelay = prevDelay
 	})
 	rstAvoidanceDelay = d
+}
+
+// SetHTTP3 adds or removes HTTP/3 from p.
+func (p *Protocols) SetHTTP3(ok bool) {
+	p.setHTTP3(ok)
 }

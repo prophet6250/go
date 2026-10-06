@@ -212,7 +212,9 @@ var (
 	IfaceHash  = ifaceHash
 )
 
-var UseAeshash = &maps.UseAeshash
+var MinAeshashSize = &maps.MinAeshashSize
+
+var AeshashEnabled = maps.AeshashEnabled
 
 func MemclrBytes(b []byte) {
 	s := (*slice)(unsafe.Pointer(&b))
@@ -570,6 +572,22 @@ func NextArenaHint() (uintptr, bool) {
 		return 0, false
 	}
 	return mheap_.arenaHints.addr, true
+}
+
+const RandomizeHeapBase = randomizeHeapBase
+
+// ArenaHintAddrs returns the heap's remaining arena hint addresses, in
+// chain order.
+func ArenaHintAddrs() []uintptr {
+	// Preallocate: appending while holding the heap lock would allocate
+	// under mheap_.lock. mallocinit generates at most 64 heap hints.
+	out := make([]uintptr, 0, 128)
+	lock(&mheap_.lock)
+	for h := mheap_.arenaHints; h != nil; h = h.next {
+		out = append(out, h.addr)
+	}
+	unlock(&mheap_.lock)
+	return out
 }
 
 type G = g
@@ -1266,6 +1284,20 @@ func PageCachePagesLeaked() (leaked uintptr) {
 
 var ProcYield = procyield
 var OSYield = osyield
+
+type Note = note
+
+var NoteClear = noteclear
+var NoteTSleepG = notetsleepg
+
+// NoteTSleepG0 calls notetsleep on the system stack
+func NoteTSleepG0(n *Note, ns int64) bool {
+	var ok bool
+	systemstack(func() {
+		ok = notetsleep(n, ns)
+	})
+	return ok
+}
 
 type Mutex = mutex
 

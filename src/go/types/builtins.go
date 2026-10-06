@@ -54,13 +54,16 @@ func (check *Checker) builtin(x *operand, call *ast.CallExpr, id builtinId) (_ b
 	default:
 		// check all arguments
 		args = check.exprList(argList)
-		nargs = len(args)
-		for _, a := range args {
-			if !a.isValid() {
-				return
+		// never bail out early for assert and trace
+		if id != _Assert && id != _Trace {
+			for _, a := range args {
+				if !a.isValid() {
+					return
+				}
 			}
 		}
 		// first argument is always in x
+		nargs = len(args)
 		if nargs > 0 {
 			*x = *args[0]
 		}
@@ -782,7 +785,7 @@ func (check *Checker) builtin(x *operand, call *ast.CallExpr, id builtinId) (_ b
 			return
 		}
 
-		check.expr(nil, nil, x, selx.X)
+		check.expr(nil, x, selx.X)
 		if !x.isValid() {
 			return
 		}
@@ -947,7 +950,7 @@ func (check *Checker) builtin(x *operand, call *ast.CallExpr, id builtinId) (_ b
 			return
 		}
 		if x.val.Kind() != constant.Bool {
-			check.errorf(x, Test, "internal error: value of %s should be a boolean constant", x)
+			check.internalErrorf(x, "value of %s should be a boolean constant", x)
 			return
 		}
 		if !constant.BoolVal(x.val) {
@@ -970,7 +973,7 @@ func (check *Checker) builtin(x *operand, call *ast.CallExpr, id builtinId) (_ b
 		var t operand
 		x1 := x
 		for _, arg := range argList {
-			check.rawExpr(nil, nil, x1, arg, nil, false) // permit trace for types, e.g.: new(trace(T))
+			check.rawExpr(nil, x1, arg, false) // permit trace for types, e.g.: new(trace(T))
 			check.dump("%v: %s", x1.Pos(), x1)
 			x1 = &t // use incoming x only for first argument
 		}

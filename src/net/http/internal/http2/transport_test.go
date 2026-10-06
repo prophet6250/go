@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"math/rand"
 	"net"
 	"net/http"
@@ -27,6 +28,7 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1810,6 +1812,7 @@ func testTransportWindowUpdateBeyondLimit(t *testing.T) {
 	tc.wantRSTStream(rt.streamID(), ErrCodeFlowControl)
 
 	tc.writeWindowUpdate(0, windowIncrease)
+	tc.wantGoAway(0, ErrCodeFlowControl)
 	tc.wantClosed()
 }
 
@@ -2005,6 +2008,161 @@ func TestTransportRejectsContentLengthWithSign(t *testing.T) {
 
 			if got != tt.wantCL {
 				t.Fatalf("Got: %q\nWant: %q", got, tt.wantCL)
+			}
+		})
+	}
+}
+
+// TestTransportResponseContentLength checks that a Content-Length we cannot
+// validate is dropped from the response rather than passed on to the caller,
+// who may be forwarding it to an HTTP/1 endpoint.
+func TestTransportResponseContentLength(t *testing.T) {
+	tests := []struct {
+		name     string
+		clValues []string
+		wantLen  int // -1 means the header is expected to be dropped.
+	}{
+		{
+			name:     "single value",
+			clValues: {"3"},
+			wantLen:  3,
+		},
+		{
+			name:     "identical duplicate values",
+			clValues: {"3", "3", "3"},
+			wantLen:  3,
+		},
+		{
+			name:     "different duplicate values",
+			clValues: {"3", "1", "3"},
+			wantLen:  -1,
+		},
+		{
+			name:     "extraneous whitespace",
+			clValues: {" 3"},
+			wantLen:  -1,
+		},
+		{
+			name:     "identical duplicate values with extraneous whitespace",
+			clValues: {"3", "3", " 3"},
+			wantLen:  -1,
+		},
+		{
+			name:     "plus sign",
+			clValues: {"+3"},
+			wantLen:  -1,
+		},
+		{
+			name:     "non-numeric",
+			clValues: {"abc"},
+			wantLen:  -1,
+		},
+		{
+			name:     "empty value",
+			clValues: {""},
+			wantLen:  -1,
+		},
+		{
+			name:    "no header",
+			wantLen: -1,
+		},
+	}
+	for _, tt := range tests {
+		synctest.Subtest(t, tt.name, func(t *testing.T) {
+			tc := newTestClientConn(t)
+			tc.greet()
+
+			req, _ := http.NewRequest("GET", "https://dummy.tld/", nil)
+			rt := tc.roundTrip(req)
+
+			headers := []string{":status", "200"}
+			for _, val := range tt.clValues {
+				headers = append(headers, "content-length", val)
+			}
+			tc.wantFrameType(FrameHeaders)
+			tc.writeHeaders(HeadersFrameParam{
+				StreamID:      rt.streamID(),
+				EndHeaders:    true,
+				BlockFragment: tc.makeHeaderBlockFragment(headers...),
+			})
+			body := slices.Repeat([]byte("a"), max(tt.wantLen, 1))
+			tc.writeData(rt.streamID(), true, body)
+
+			res := rt.response()
+			rt.wantBody(body)
+
+			if res.ContentLength != int64(tt.wantLen) {
+				t.Errorf("got ContentLength = %d, want %d", res.ContentLength, tt.wantLen)
+			}
+			var wantHeader []string
+			if tt.wantLen >= 0 {
+				wantHeader = []string{strconv.FormatInt(int64(tt.wantLen), 10)}
+			}
+			if got := res.Header["Content-Length"]; !slices.Equal(got, wantHeader) {
+				t.Errorf("got Header[%q] = %q, want %q", "Content-Length", got, wantHeader)
+			}
+		})
+	}
+}
+
+// TestTransportResponseConnHeaders checks that connection-related headers,
+// which are not valid in HTTP/2 and which an HTTP/1 endpoint may use for
+// framing, are dropped from the response.
+func TestTransportResponseConnHeaders(t *testing.T) {
+	tests := []struct {
+		name       string
+		fields     []string
+		wantHeader http.Header
+	}{
+		{
+			name:       "unaffected header",
+			fields:     {"content-type", "text/plain"},
+			wantHeader: {"Content-Type": {"text/plain"}},
+		},
+		{
+			name:   "transfer-encoding",
+			fields: {"transfer-encoding", "chunked"},
+		},
+		{
+			name:   "transfer-encoding alongside content-length",
+			fields: {"content-length", "-1", "transfer-encoding", "chunked"},
+		},
+		{
+			name:   "connection and keep-alive",
+			fields: {"connection", "keep-alive", "keep-alive", "timeout=5"},
+		},
+		{
+			name:   "proxy-connection",
+			fields: {"proxy-connection", "keep-alive"},
+		},
+		{
+			name:   "upgrade",
+			fields: {"upgrade", "websocket"},
+		},
+	}
+	for _, tt := range tests {
+		synctest.Subtest(t, tt.name, func(t *testing.T) {
+			tc := newTestClientConn(t)
+			tc.greet()
+
+			req, _ := http.NewRequest("GET", "https://dummy.tld/", nil)
+			rt := tc.roundTrip(req)
+
+			headers := []string{":status", "200"}
+			headers = append(headers, tt.fields...)
+			tc.wantFrameType(FrameHeaders)
+			tc.writeHeaders(HeadersFrameParam{
+				StreamID:      rt.streamID(),
+				EndHeaders:    true,
+				BlockFragment: tc.makeHeaderBlockFragment(headers...),
+			})
+			tc.writeData(rt.streamID(), true, []byte("body"))
+
+			res := rt.response()
+			rt.wantBody([]byte("body"))
+
+			if !maps.EqualFunc(res.Header, tt.wantHeader, slices.Equal) {
+				t.Errorf("got Header = %q, want %q", res.Header, tt.wantHeader)
 			}
 		})
 	}
@@ -2864,28 +3022,34 @@ func testTransportCloseAfterLostPing(t *testing.T) {
 }
 
 func TestTransportPingWriteBlocks(t *testing.T) {
-	ts := newTestServer(t,
-		func(w http.ResponseWriter, r *http.Request) {},
-	)
+	// This test can't use synctest, because blocking the transport's writes
+	// causes it to block trying to acquire ClientConn.wmu.
+	// The blocked mutex acquisition prevents the synctest bubble from quiescing.
+	//
+	// This also means we can't use newTestClientConn, which assumes synctest.
 	tr := newTransport(t)
+	var wg sync.WaitGroup
+	defer wg.Wait()
 	tr.Dial = func(network, addr string) (net.Conn, error) {
 		s, c := net.Pipe() // unbuffered, unlike a TCP conn
-		go func() {
-			srv := tls.Server(s, tlsConfigInsecure)
-			srv.Handshake()
+		wg.Go(func() {
+			srv := tls.Server(s, testServerTLSConfig)
+			if err := srv.Handshake(); err != nil {
+				t.Error(err)
+			}
 
 			// Read initial handshake frames.
 			// Without this, we block indefinitely in newClientConn,
 			// and never get to the point of sending a PING.
 			var buf [1024]byte
 			s.Read(buf[:])
-		}()
+		})
 		return c, nil
 	}
 	tr.HTTP2.PingTimeout = 1 * time.Millisecond
 	tr.HTTP2.SendPingTimeout = 1 * time.Millisecond
 	c := &http.Client{Transport: tr}
-	_, err := c.Get(ts.URL)
+	_, err := c.Get("https://example.tld/")
 	if err == nil {
 		t.Fatalf("Get = nil, want error")
 	}
@@ -3157,7 +3321,7 @@ func testTransportRetryHasLimit(t *testing.T) {
 	rt := tt.roundTrip(req)
 
 	tc := tt.getConn()
-	tc.netconn.SetReadDeadline(time.Time{})
+	tc.netconn.SetReadError(nil)
 	tc.wantFrameType(FrameSettings)
 	tc.wantFrameType(FrameWindowUpdate)
 
@@ -3984,7 +4148,7 @@ func testTransportNewClientConnCloseOnWriteError(t *testing.T) {
 
 	synctest.Wait()
 	writeErr := errors.New("write error")
-	tc.netconn.loc.setWriteError(writeErr)
+	tc.netconn.Peer().SetWriteError(writeErr)
 
 	tc.writeSettings()
 	tc.wantIdle()
@@ -3995,7 +4159,7 @@ func testTransportNewClientConnCloseOnWriteError(t *testing.T) {
 	tc.wantIdle()
 
 	synctest.Wait()
-	if !tc.netconn.IsClosedByPeer() {
+	if !tc.netconn.Peer().IsClosed() {
 		t.Error("expected closed conn")
 	}
 }
@@ -4016,7 +4180,7 @@ func testTransportRoundtripCloseOnWriteError(t *testing.T) {
 	tc.closeWriteWithError(writeErr)
 
 	body.writeBytes(1)
-	if err := rt.err(); err != writeErr {
+	if err := rt.err(); !errors.Is(err, writeErr) {
 		t.Fatalf("RoundTrip error %v, want %v", err, writeErr)
 	}
 
@@ -4221,46 +4385,6 @@ func (rc *closeChecker) isClosed() error {
 		return fmt.Errorf("body not closed after %v", timeout)
 	}
 	return nil
-}
-
-// A blockingWriteConn is a net.Conn that blocks in Write after some number of bytes are written.
-type blockingWriteConn struct {
-	net.Conn
-	writeOnce    sync.Once
-	writec       chan struct{} // closed after the write limit is reached
-	unblockc     chan struct{} // closed to unblock writes
-	count, limit int
-}
-
-func newBlockingWriteConn(conn net.Conn, limit int) *blockingWriteConn {
-	return &blockingWriteConn{
-		Conn:     conn,
-		limit:    limit,
-		writec:   make(chan struct{}),
-		unblockc: make(chan struct{}),
-	}
-}
-
-// wait waits until the conn blocks writing the limit+1st byte.
-func (c *blockingWriteConn) wait() {
-	<-c.writec
-}
-
-// unblock unblocks writes to the conn.
-func (c *blockingWriteConn) unblock() {
-	close(c.unblockc)
-}
-
-func (c *blockingWriteConn) Write(b []byte) (n int, err error) {
-	if c.count+len(b) > c.limit {
-		c.writeOnce.Do(func() {
-			close(c.writec)
-		})
-		<-c.unblockc
-	}
-	n, err = c.Conn.Write(b)
-	c.count += n
-	return n, err
 }
 
 // Write several requests to a ClientConn at the same time, looking for race conditions.
@@ -5138,7 +5262,7 @@ func TestTransport1xxLimits(t *testing.T) {
 			tc.wantFrameType(FrameHeaders)
 
 			for i := 0; i < test.hcount; i++ {
-				if fr, err := tc.fr.ReadFrame(); err != os.ErrDeadlineExceeded {
+				if fr, err := tc.fr.ReadFrame(); !errors.Is(err, os.ErrDeadlineExceeded) {
 					t.Fatalf("after writing %v 1xx headers: read %v, %v; want idle", i, fr, err)
 				}
 				tc.writeHeaders(HeadersFrameParam{

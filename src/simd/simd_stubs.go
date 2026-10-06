@@ -75,8 +75,14 @@ func (x Int8s) Not() Int8s
 // NotEqual returns a mask indicating where x and y are not equal.
 func (x Int8s) NotEqual(y Int8s) Mask8s
 
+// OnesCount counts the number of set bits in each element.
+func (x Int8s) OnesCount() Int8s
+
 // Or returns the bitwise OR of x and y.
 func (x Int8s) Or(y Int8s) Int8s
+
+// ReduceSum returns the scalar sum of the elements of x.
+func (x Int8s) ReduceSum() int8
 
 // Store stores the vector elements into the slice s.
 func (x Int8s) Store(s []int8)
@@ -173,6 +179,9 @@ func (x Int16s) NotEqual(y Int16s) Mask16s
 
 // Or returns the bitwise OR of x and y.
 func (x Int16s) Or(y Int16s) Int16s
+
+// ReduceSum returns the scalar sum of the elements of x.
+func (x Int16s) ReduceSum() int16
 
 // RotatesAllLeft rotates all elements left by y bits.
 func (x Int16s) RotateAllLeft(dist uint64) Int16s
@@ -281,6 +290,9 @@ func (x Int32s) NotEqual(y Int32s) Mask32s
 
 // Or returns the bitwise OR of x and y.
 func (x Int32s) Or(y Int32s) Int32s
+
+// ReduceSum returns the scalar sum of the elements of x.
+func (x Int32s) ReduceSum() int32
 
 // RotatesAllLeft rotates all elements left by y bits.
 func (x Int32s) RotateAllLeft(dist uint64) Int32s
@@ -459,8 +471,14 @@ func (x Uint8s) Not() Uint8s
 // NotEqual returns a mask indicating where x and y are not equal.
 func (x Uint8s) NotEqual(y Uint8s) Mask8s
 
+// OnesCount counts the number of set bits in each element.
+func (x Uint8s) OnesCount() Uint8s
+
 // Or returns the bitwise OR of x and y.
 func (x Uint8s) Or(y Uint8s) Uint8s
+
+// ReduceSum returns the scalar sum of the elements of x.
+func (x Uint8s) ReduceSum() uint8
 
 // ReshapeToUint16s reinterprets the vector bits as a Uint16s vector.
 func (x Uint8s) ReshapeToUint16s() Uint16s
@@ -560,6 +578,9 @@ func (x Uint16s) NotEqual(y Uint16s) Mask16s
 
 // Or returns the bitwise OR of x and y.
 func (x Uint16s) Or(y Uint16s) Uint16s
+
+// ReduceSum returns the scalar sum of the elements of x.
+func (x Uint16s) ReduceSum() uint16
 
 // ReshapeToUint32s reinterprets the vector bits as a Uint32s vector.
 func (x Uint16s) ReshapeToUint32s() Uint32s
@@ -668,6 +689,9 @@ func (x Uint32s) NotEqual(y Uint32s) Mask32s
 
 // Or returns the bitwise OR of x and y.
 func (x Uint32s) Or(y Uint32s) Uint32s
+
+// ReduceSum returns the scalar sum of the elements of x.
+func (x Uint32s) ReduceSum() uint32
 
 // ReshapeToUint16s reinterprets the vector bits as a Uint16s vector.
 func (x Uint32s) ReshapeToUint16s() Uint16s
@@ -896,6 +920,9 @@ func (x Float32s) Neg() Float32s
 // NotEqual returns a mask indicating where x and y are not equal.
 func (x Float32s) NotEqual(y Float32s) Mask32s
 
+// ReduceSum returns the scalar sum of the elements of x.
+func (x Float32s) ReduceSum() float32
+
 // Sqrt returns the element-wise square root of x.
 func (x Float32s) Sqrt() Float32s
 
@@ -974,6 +1001,9 @@ func (x Float64s) Neg() Float64s
 // NotEqual returns a mask indicating where x and y are not equal.
 func (x Float64s) NotEqual(y Float64s) Mask64s
 
+// ReduceSum returns the scalar sum of the elements of x.
+func (x Float64s) ReduceSum() float64
+
 // Sqrt returns the element-wise square root of x.
 func (x Float64s) Sqrt() Float64s
 
@@ -992,8 +1022,17 @@ func (x Float64s) Sub(y Float64s) Float64s
 // ToBits reinterprets the vector bits as an unsigned integer vector.
 func (x Float64s) ToBits() Uint64s
 
+// All returns true when all positions in mask x are true.
+func (x Mask8s) All() bool
+
 // And returns the bitwise AND of x and y.
 func (x Mask8s) And(y Mask8s) Mask8s
+
+// Any returns true when any position in mask x is true.
+func (x Mask8s) Any() bool
+
+// None returns true when no positions in mask x are set.
+func (x Mask8s) None() bool
 
 // Or returns the bitwise OR of x and y.
 func (x Mask8s) Or(y Mask8s) Mask8s
@@ -1004,8 +1043,20 @@ func (x Mask8s) String() string
 // ToInt8s converts the mask to an Int8s vector.
 func (x Mask8s) ToInt8s() (to Int8s)
 
+// TrailingZeros returns the number of low-order false (zero) elements in mask x.
+func (x Mask8s) TrailingZeros() int
+
+// All returns true when all positions in mask x are true.
+func (x Mask16s) All() bool
+
 // And returns the bitwise AND of x and y.
 func (x Mask16s) And(y Mask16s) Mask16s
+
+// Any returns true when any position in mask x is true.
+func (x Mask16s) Any() bool
+
+// None returns true when no positions in mask x are set.
+func (x Mask16s) None() bool
 
 // Or returns the bitwise OR of x and y.
 func (x Mask16s) Or(y Mask16s) Mask16s
@@ -1016,8 +1067,20 @@ func (x Mask16s) String() string
 // ToInt16s converts the mask to an Int16s vector.
 func (x Mask16s) ToInt16s() (to Int16s)
 
+// TrailingZeros returns the number of low-order false (zero) elements in mask x.
+func (x Mask16s) TrailingZeros() int
+
+// All returns true when all positions in mask x are true.
+func (x Mask32s) All() bool
+
 // And returns the bitwise AND of x and y.
 func (x Mask32s) And(y Mask32s) Mask32s
+
+// Any returns true when any position in mask x is true.
+func (x Mask32s) Any() bool
+
+// None returns true when no positions in mask x are set.
+func (x Mask32s) None() bool
 
 // Or returns the bitwise OR of x and y.
 func (x Mask32s) Or(y Mask32s) Mask32s
@@ -1028,8 +1091,20 @@ func (x Mask32s) String() string
 // ToInt32s converts the mask to an Int32s vector.
 func (x Mask32s) ToInt32s() (to Int32s)
 
+// TrailingZeros returns the number of low-order false (zero) elements in mask x.
+func (x Mask32s) TrailingZeros() int
+
+// All returns true when all positions in mask x are true.
+func (x Mask64s) All() bool
+
 // And returns the bitwise AND of x and y.
 func (x Mask64s) And(y Mask64s) Mask64s
+
+// Any returns true when any position in mask x is true.
+func (x Mask64s) Any() bool
+
+// None returns true when no positions in mask x are set.
+func (x Mask64s) None() bool
 
 // Or returns the bitwise OR of x and y.
 func (x Mask64s) Or(y Mask64s) Mask64s
@@ -1039,3 +1114,6 @@ func (x Mask64s) String() string
 
 // ToInt64s converts the mask to an Int64s vector.
 func (x Mask64s) ToInt64s() (to Int64s)
+
+// TrailingZeros returns the number of low-order false (zero) elements in mask x.
+func (x Mask64s) TrailingZeros() int

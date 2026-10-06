@@ -10,6 +10,7 @@ import (
 	"cmd/compile/internal/types2"
 	"fmt"
 	"internal/buildcfg"
+	"internal/simd/variants"
 	"strings"
 )
 
@@ -183,7 +184,10 @@ func (r *Rewriter) Rewrite(files []*syntax.File) {
 
 		var newDecls []syntax.Decl
 		for _, k := range r.sizes {
-			newDecls = r.generateForSize(fileAST, k, newDecls)
+			newDecls = r.generateForSize(fileAST, k, "", newDecls)
+			if v := variants.Variants[variants.Key{Arch: buildcfg.GOARCH, Size: k}]; v != nil {
+				newDecls = r.generateForSize(fileAST, k, v.Suffix, newDecls)
+			}
 		}
 
 		// Then replace original functions with dispatchers.
@@ -229,7 +233,12 @@ func (r *Rewriter) generateDispatchers(fileAST *syntax.File) {
 				continue
 			}
 
-			// Clean signature -> Replace body with dispatcher
+			// Clean signature -> Replace body with dispatcher.
+			// For methods, ensure the receiver has a name so the dispatcher
+			// can forward the call to the specialized method on the receiver.
+			if d.Recv != nil && d.Recv.Name == nil {
+				d.Recv.Name = syntax.NewName(d.Recv.Pos(), "_simdRecv")
+			}
 			d.Body = r.createDispatcherBody(d, sig)
 			newDecls = append(newDecls, d)
 
@@ -310,11 +319,13 @@ func (r *Rewriter) createDispatcherBody(d *syntax.FuncDecl, sig *types2.Signatur
 	args := func() []syntax.Expr {
 		var args []syntax.Expr
 		if d.Type.ParamList != nil {
-			for _, field := range d.Type.ParamList {
-				if field.Name != nil {
-					paramName := syntax.NewName(field.Pos(), field.Name.Value)
-					args = append(args, paramName)
+			for i, field := range d.Type.ParamList {
+				if field.Name == nil || field.Name.Value == "_" {
+					// Blank and unnamed parameters cannot be passed along, so name them.
+					field.Name = syntax.NewName(field.Pos(), fmt.Sprintf("p@%d", i))
 				}
+				paramName := syntax.NewName(field.Pos(), field.Name.Value)
+				args = append(args, paramName)
 			}
 		}
 		return args
@@ -353,13 +364,26 @@ func (r *Rewriter) createDispatcherBody(d *syntax.FuncDecl, sig *types2.Signatur
 
 	var emulation syntax.Stmt
 
-	for _, k := range r.sizes {
-		fnName := fmt.Sprintf("%s@simd%d", d.Name.Value, k)
+	makeCallReturnStmt := func(k int, variantSuffix string) syntax.Stmt {
+		fnName := fmt.Sprintf("%s@simd%d%s", d.Name.Value, k, variantSuffix)
 		fnIdent := syntax.NewName(d.Pos(), fnName)
 
+		var fun syntax.Expr
+		if d.Recv != nil && d.Recv.Name != nil {
+			// For methods, call the specialized method on the receiver rather
+			// than as a plain function, so the type-checker can resolve it.
+			recvIdent := syntax.NewName(d.Pos(), d.Recv.Name.Value)
+			selExpr := &syntax.SelectorExpr{X: recvIdent, Sel: fnIdent}
+			selExpr.SetPos(d.Pos())
+			fun = selExpr
+		} else {
+			fun = pe(fnIdent)
+		}
+
 		callExpr := pe(&syntax.CallExpr{
-			Fun:     pe(fnIdent),
+			Fun:     fun,
 			ArgList: args(),
+			HasDots: sig.Variadic(),
 		})
 
 		// callReturnStmt is either `return call(...)` or `call(...); return`
@@ -376,29 +400,38 @@ func (r *Rewriter) createDispatcherBody(d *syntax.FuncDecl, sig *types2.Signatur
 			}
 		}
 		callReturnStmt.SetPos(d.Pos())
+		return callReturnStmt
+	}
+
+	guardCallWithCondition := func(require string, stmt syntax.Stmt) syntax.Stmt {
+		cond := pe(&syntax.CallExpr{
+			Fun: pe(&syntax.SelectorExpr{
+				X:   syntax.NewName(d.Pos(), simdPkg), // Assume this is resolvable
+				Sel: syntax.NewName(d.Pos(), require),
+			})})
+
+		blockStmt, ok := stmt.(*syntax.BlockStmt)
+		if !ok {
+			blockStmt = &syntax.BlockStmt{
+				List:   []syntax.Stmt{stmt},
+				Rbrace: d.Pos(),
+			}
+			blockStmt.SetPos(d.Pos())
+		}
+
+		guarded := ps(&syntax.IfStmt{
+			Cond: cond,
+			Then: blockStmt,
+		})
+		return guarded
+	}
+
+	for _, k := range r.sizes {
+
+		callReturnStmt := makeCallReturnStmt(k, "")
 
 		if k == 0 {
-			// emulation == `if simd.Emulated() { callReturnStmt }`
-			// save it for the first part of the 128 case.
-			cond := pe(&syntax.CallExpr{
-				Fun: pe(&syntax.SelectorExpr{
-					X:   syntax.NewName(d.Pos(), simdPkg), // Assume this is resolvable
-					Sel: syntax.NewName(d.Pos(), emulatedFn),
-				})})
-
-			blockStmt, ok := callReturnStmt.(*syntax.BlockStmt)
-			if !ok {
-				blockStmt = &syntax.BlockStmt{
-					List:   []syntax.Stmt{callReturnStmt},
-					Rbrace: d.Pos(),
-				}
-				blockStmt.SetPos(d.Pos())
-			}
-
-			emulation = ps(&syntax.IfStmt{
-				Cond: cond,
-				Then: blockStmt,
-			})
+			emulation = guardCallWithCondition(emulatedFn, callReturnStmt)
 			continue
 		}
 
@@ -410,9 +443,21 @@ func (r *Rewriter) createDispatcherBody(d *syntax.FuncDecl, sig *types2.Signatur
 			emulation = nil
 		}
 
+		// if this architecture and size has a variant, then guard
+		// the regular case call with variant.require
+		// and then follow it with the variant case.
+		// `if simd.<require>() { callReturnStmt }`
+		if v := variants.Variants[variants.Key{Arch: buildcfg.GOARCH, Size: k}]; v != nil {
+			callReturnStmt = guardCallWithCondition(v.DefaultRequires, callReturnStmt)
+			caseBody = append(caseBody, callReturnStmt)
+			callReturnStmt = makeCallReturnStmt(k, v.Suffix)
+		}
+
+		caseBody = append(caseBody, callReturnStmt)
+
 		caseClause := &syntax.CaseClause{
 			Cases: pe(&syntax.BasicLit{Kind: syntax.IntLit, Value: fmt.Sprintf("%d", k)}),
-			Body:  append(caseBody, callReturnStmt),
+			Body:  caseBody,
 		}
 		caseClause.SetPos(d.Pos())
 		switchStmt.Body = append(switchStmt.Body, caseClause)
@@ -447,8 +492,8 @@ func (r *Rewriter) panicStmt(p syntax.Pos, unquotedMessage string) *syntax.ExprS
 	return panicStmt
 }
 
-func (r *Rewriter) generateForSize(fileAST *syntax.File, k int, newDecls []syntax.Decl) []syntax.Decl {
-	copier := NewDeepCopier(r.pkg, r.info, k, r.analyzer, fmt.Sprintf("@simd%d", k))
+func (r *Rewriter) generateForSize(fileAST *syntax.File, k int, variantSuffix string, newDecls []syntax.Decl) []syntax.Decl {
+	copier := NewDeepCopier(r.pkg, r.info, k, r.analyzer, fmt.Sprintf("@simd%d%s", k, variantSuffix), variantSuffix)
 	for _, decl := range fileAST.DeclList {
 		if r.shouldIncludeDecl(decl) {
 			newDecl := copier.CopyDecl(decl)
