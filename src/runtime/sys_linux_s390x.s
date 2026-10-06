@@ -417,14 +417,15 @@ TEXT runtime·sigtramp(SB),NOSPLIT|TOPFRAME,$160
 	// initialize essential registers (just in case)
 	XOR	R0, R0
 
-	MOVD	R6, 32(R15)
-	MOVD	R7, 40(R15)
-	MOVD	R8, 48(R15)
-	MOVD	R9, 56(R15)
-	MOVD	R10, 64(R15)
-	MOVD	R11, 72(R15)
-	MOVD	R12, 80(R15)
-	MOVD	g, 88(R15)
+	// MOVD	R6, 32(R15)
+	// MOVD	R7, 40(R15)
+	// MOVD	R8, 48(R15)
+	// MOVD	R9, 56(R15)
+	// MOVD	R10, 64(R15)
+	// MOVD	R11, 72(R15)
+	// MOVD	R12, 80(R15)
+	// MOVD	g, 88(R15)
+	STMG	R6, g, 32(R15)
 	FMOVD	F8, 96(R15)
 	FMOVD	F9, 104(R15)
 	FMOVD	F10, 112(R15)
@@ -446,14 +447,15 @@ TEXT runtime·sigtramp(SB),NOSPLIT|TOPFRAME,$160
 	MOVD	$runtime·sigtrampgo(SB), R5
 	BL	R5
 
-	MOVD	32(R15), R6
-	MOVD	40(R15), R7
-	MOVD	48(R15), R8
-	MOVD	56(R15), R9
-	MOVD	64(R15), R10
-	MOVD	72(R15), R11
-	MOVD	80(R15), R12
-	MOVD	88(R15), g
+	// MOVD	32(R15), R6
+	// MOVD	40(R15), R7
+	// MOVD	48(R15), R8
+	// MOVD	56(R15), R9
+	// MOVD	64(R15), R10
+	// MOVD	72(R15), R11
+	// MOVD	80(R15), R12
+	// MOVD	88(R15), g
+	LMG		32(R15), R6, g
 	FMOVD	96(R15), F8
 	FMOVD	104(R15), F9
 	FMOVD	112(R15), F10
