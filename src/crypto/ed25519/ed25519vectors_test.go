@@ -14,6 +14,10 @@ import (
 	"testing"
 )
 
+func TestEd25519Vectors(t *testing.T) {
+	cryptotest.TestAllImplementations(t, "ed25519", testEd25519Vectors)
+}
+
 // TestEd25519Vectors runs a very large set of test vectors that exercise all
 // combinations of low-order points, low-order components, and non-canonical
 // encodings. These vectors lock in unspecified and spec-divergent behaviors in
@@ -28,7 +32,7 @@ import (
 // should use github.com/hdevalence/ed25519consensus.
 //
 // See https://hdevalence.ca/blog/2020-10-04-its-25519am for more details.
-func TestEd25519Vectors(t *testing.T) {
+func testEd25519Vectors(t *testing.T) {
 	jsonVectors := downloadEd25519Vectors(t)
 	var vectors []struct {
 		A, R, S, M string

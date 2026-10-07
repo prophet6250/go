@@ -99,6 +99,10 @@ func (zeroReader) Read(buf []byte) (int, error) {
 }
 
 func TestSignVerify(t *testing.T) {
+	cryptotest.TestAllImplementations(t, "ed25519", testSignVerify)
+}
+
+func testSignVerify(t *testing.T) {
 	var zero zeroReader
 	public, private, _ := GenerateKey(zero)
 
@@ -216,6 +220,10 @@ func TestSignVerifyContext(t *testing.T) {
 }
 
 func TestCryptoSigner(t *testing.T) {
+	cryptotest.TestAllImplementations(t, "ed25519", testCryptoSigner)
+}
+
+func testCryptoSigner(t *testing.T) {
 	var zero zeroReader
 	public, private, _ := GenerateKey(zero)
 
@@ -274,6 +282,10 @@ func TestEqual(t *testing.T) {
 }
 
 func TestGolden(t *testing.T) {
+	cryptotest.TestAllImplementations(t, "ed25519", testGolden)
+}
+
+func testGolden(t *testing.T) {
 	// sign.input.gz is a selection of test cases from
 	// https://ed25519.cr.yp.to/python/sign.input
 	testDataZ, err := os.Open("testdata/sign.input.gz")
@@ -344,6 +356,10 @@ func TestGolden(t *testing.T) {
 }
 
 func TestMalleability(t *testing.T) {
+	cryptotest.TestAllImplementations(t, "ed25519", testMalleability)
+}
+
+func testMalleability(t *testing.T) {
 	// https://tools.ietf.org/html/rfc8032#section-5.1.7 adds an additional test
 	// that s be in [0, order). This prevents someone from adding a multiple of
 	// order to s and obtaining a second valid signature for the same message.

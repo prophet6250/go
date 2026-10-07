@@ -117,7 +117,9 @@ func (priv PrivateKey) Sign(rand io.Reader, message []byte, opts crypto.SignerOp
 		}
 		return ed25519.SignCtx(k, message, context)
 	case hash == crypto.Hash(0): // Ed25519
-		return ed25519.Sign(k, message), nil
+		sig := make([]byte, SignatureSize)
+		sign(sig, priv, message)
+		return sig, nil
 	default:
 		return nil, errors.New("ed25519: expected opts.HashFunc() zero (unhashed message, for standard Ed25519) or SHA-512 (for Ed25519ph)")
 	}
@@ -213,7 +215,7 @@ func Sign(privateKey PrivateKey, message []byte) []byte {
 	return signature
 }
 
-func sign(signature []byte, privateKey PrivateKey, message []byte) {
+func signGeneric(signature, privateKey, message []byte) {
 	k, err := privateKeyCache.Get(&privateKey[0], func() (*ed25519.PrivateKey, error) {
 		return ed25519.NewPrivateKey(privateKey)
 	}, func(k *ed25519.PrivateKey) bool {
@@ -263,8 +265,20 @@ func VerifyWithOptions(publicKey PublicKey, message, sig []byte, opts *Options) 
 		}
 		return ed25519.VerifyCtx(k, message, sig, opts.Context)
 	case opts.Hash == crypto.Hash(0): // Ed25519
-		return ed25519.Verify(k, message, sig)
+		if !verify(publicKey, message, sig) {
+			return errors.New("ed25519: invalid signature")
+		}
+		return nil
 	default:
 		return errors.New("ed25519: expected opts.Hash zero (unhashed message, for standard Ed25519) or SHA-512 (for Ed25519ph)")
 	}
+}
+
+func verifyGeneric(publicKey PublicKey, message, sig []byte) bool {
+	k, err := ed25519.NewPublicKey(publicKey)
+	if err != nil {
+		return false
+	}
+
+	return ed25519.Verify(k, message, sig) == nil
 }

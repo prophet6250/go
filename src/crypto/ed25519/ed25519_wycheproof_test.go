@@ -5,6 +5,7 @@ package ed25519_test
 
 import (
 	"crypto/ed25519"
+	"crypto/internal/cryptotest"
 	"crypto/internal/cryptotest/wycheproof"
 	"crypto/x509"
 	"fmt"
@@ -12,6 +13,10 @@ import (
 )
 
 func TestEd25519Wycheproof(t *testing.T) {
+	cryptotest.TestAllImplementations(t, "ed25519", testEd25519Wycheproof)
+}
+
+func testEd25519Wycheproof(t *testing.T) {
 	file := "ed25519_test.json"
 	var testdata wycheproof.EddsaVerifySchemaV1Json
 	wycheproof.LoadVectorFile(t, file, &testdata)
