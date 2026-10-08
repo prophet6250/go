@@ -80,6 +80,7 @@ func AlgInit() {
 	} else if goarch.GOARCH == "arm64" && cpu.ARM64.HasAES {
 		initAlgAES()
 	}
+	algInitArch()
 
 	useAeshash32 = 4 >= MinAeshashSize
 	useAeshash64 = 8 >= MinAeshashSize
