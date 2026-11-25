@@ -350,6 +350,9 @@ var optab = []Optab{
 	// KMA
 	{i: 126, as: AKMA, a1: C_REG, a2: C_REG, a6: C_REG},
 
+	// PCC
+	{i: 130, as: APCC},
+
 	// vector instructions
 
 	// VRX store
@@ -4522,6 +4525,9 @@ func (c *ctxtz) asmout(p *obj.Prog, asm *[]byte) {
 		d2 := uint32(c.vregoff(&p.To))
 		i3 := uint32(c.vregoff(p.GetFrom3()))
 		zVSI(op, uint32(v1), uint32(b2), d2, i3, asm)
+
+	case 130: // PCC
+		zRRE(op_PCC, 0, 0, asm)
 	}
 }
 

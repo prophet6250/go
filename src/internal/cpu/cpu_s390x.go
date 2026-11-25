@@ -52,6 +52,17 @@ const (
 	eddsaSignEd448     function = 44 // Curve448
 )
 
+const (
+	// PCC function codes
+	pccScalarMultiplyP256    function = 64
+	pccScalarMultiplyP384    function = 65
+	pccScalarMultiplyP521    function = 66
+	pccScalarMultiplyEd25519 function = 72
+	pccScalarMultiplyEd448   function = 73
+	pccScalarMultiplyX25519  function = 80
+	pccScalarMultiplyX448    function = 81
+)
+
 // queryResult contains the result of a Query function
 // call. Bits are numbered in big endian order so the
 // leftmost bit (the MSB) is at index 0.
@@ -133,6 +144,7 @@ func kmaQuery() queryResult
 func kimdQuery() queryResult
 func klmdQuery() queryResult
 func kdsaQuery() queryResult
+func pccQuery() queryResult
 
 func doinit() {
 	options = []option{
@@ -146,6 +158,7 @@ func doinit() {
 		{Name: "vx", Feature: &S390X.HasVX},
 		{Name: "vxe", Feature: &S390X.HasVXE},
 		{Name: "kdsa", Feature: &S390X.HasKDSA},
+		{Name: "pcc", Feature: &S390X.HasPCC},
 	}
 
 	aes := []function{aes128, aes192, aes256}
@@ -190,6 +203,17 @@ func doinit() {
 			kdsa := kdsaQuery()
 			S390X.HasECDSA = kdsa.Has(ecdsaVerifyP256, ecdsaSignP256, ecdsaVerifyP384, ecdsaSignP384, ecdsaVerifyP521, ecdsaSignP521)
 			S390X.HasEDDSA = kdsa.Has(eddsaVerifyEd25519, eddsaSignEd25519, eddsaVerifyEd448, eddsaSignEd448)
+		}
+		S390X.HasPCC = facilities.Has(msa4)
+		if S390X.HasPCC && facilities.Has(msa9) {
+			pcc := pccQuery()
+			S390X.HasPCCP256 = pcc.Has(pccScalarMultiplyP256)
+			S390X.HasPCCP384 = pcc.Has(pccScalarMultiplyP384)
+			S390X.HasPCCP521 = pcc.Has(pccScalarMultiplyP521)
+			S390X.HasPCCEd25519 = pcc.Has(pccScalarMultiplyEd25519)
+			S390X.HasPCCEd448 = pcc.Has(pccScalarMultiplyEd448)
+			S390X.HasPCCX25519 = pcc.Has(pccScalarMultiplyX25519)
+			S390X.HasPCCX448 = pcc.Has(pccScalarMultiplyX448)
 		}
 	}
 
