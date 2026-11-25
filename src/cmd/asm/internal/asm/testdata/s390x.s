@@ -433,6 +433,7 @@ label_pfd:
 	KDSA	R0, R8                 // b93a0008
 	KMA	R2, R6, R4             // b9296024
 	KMCTR   R2, R6, R4             // b92d6024
+	PCC                            // b92c0000
 
 	// vector add and sub instructions
 	VAB	V3, V4, V4              // e743400000f3

@@ -138,29 +138,37 @@ var PPC64 struct {
 }
 
 var S390X struct {
-	_         CacheLinePad
-	HasZARCH  bool // z architecture mode is active [mandatory]
-	HasSTFLE  bool // store facility list extended [mandatory]
-	HasLDISP  bool // long (20-bit) displacements [mandatory]
-	HasEIMM   bool // 32-bit immediates [mandatory]
-	HasDFP    bool // decimal floating point
-	HasETF3EH bool // ETF-3 enhanced
-	HasMSA    bool // message security assist (CPACF)
-	HasAES    bool // KM-AES{128,192,256} functions
-	HasAESCBC bool // KMC-AES{128,192,256} functions
-	HasAESCTR bool // KMCTR-AES{128,192,256} functions
-	HasAESGCM bool // KMA-GCM-AES{128,192,256} functions
-	HasGHASH  bool // KIMD-GHASH function
-	HasSHA1   bool // K{I,L}MD-SHA-1 functions
-	HasSHA256 bool // K{I,L}MD-SHA-256 functions
-	HasSHA512 bool // K{I,L}MD-SHA-512 functions
-	HasSHA3   bool // K{I,L}MD-SHA3-{224,256,384,512} and K{I,L}MD-SHAKE-{128,256} functions
-	HasVX     bool // vector facility. Note: the runtime sets this when it processes auxv records.
-	HasVXE    bool // vector-enhancements facility 1
-	HasKDSA   bool // elliptic curve functions
-	HasECDSA  bool // NIST curves
-	HasEDDSA  bool // Edwards curves
-	_         CacheLinePad
+	_             CacheLinePad
+	HasZARCH      bool // z architecture mode is active [mandatory]
+	HasSTFLE      bool // store facility list extended [mandatory]
+	HasLDISP      bool // long (20-bit) displacements [mandatory]
+	HasEIMM       bool // 32-bit immediates [mandatory]
+	HasDFP        bool // decimal floating point
+	HasETF3EH     bool // ETF-3 enhanced
+	HasMSA        bool // message security assist (CPACF)
+	HasAES        bool // KM-AES{128,192,256} functions
+	HasAESCBC     bool // KMC-AES{128,192,256} functions
+	HasAESCTR     bool // KMCTR-AES{128,192,256} functions
+	HasAESGCM     bool // KMA-GCM-AES{128,192,256} functions
+	HasGHASH      bool // KIMD-GHASH function
+	HasSHA1       bool // K{I,L}MD-SHA-1 functions
+	HasSHA256     bool // K{I,L}MD-SHA-256 functions
+	HasSHA512     bool // K{I,L}MD-SHA-512 functions
+	HasSHA3       bool // K{I,L}MD-SHA3-{224,256,384,512} and K{I,L}MD-SHAKE-{128,256} functions
+	HasVX         bool // vector facility. Note: the runtime sets this when it processes auxv records.
+	HasVXE        bool // vector-enhancements facility 1
+	HasKDSA       bool // elliptic curve functions
+	HasECDSA      bool // NIST curves
+	HasEDDSA      bool // Edwards curves
+	HasPCC        bool // perform cryptographic computation
+	HasPCCP256    bool // PCC-Scalar-Multiply-P256
+	HasPCCP384    bool // PCC-Scalar-Multiply-P384
+	HasPCCP521    bool // PCC-Scalar-Multiply-P521
+	HasPCCEd25519 bool // PCC-Scalar-Multiply-Ed25519
+	HasPCCEd448   bool // PCC-Scalar-Multiply-Ed448
+	HasPCCX25519  bool // PCC-Scalar-Multiply-X25519
+	HasPCCX448    bool // PCC-Scalar-Multiply-X448
+	_             CacheLinePad
 }
 
 // RISCV64 contains the supported CPU features and performance characteristics for riscv64

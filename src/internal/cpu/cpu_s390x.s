@@ -56,8 +56,15 @@ TEXT ·klmdQuery(SB), NOSPLIT|NOFRAME, $0-16
 
 // func kdsaQuery() queryResult
 TEXT ·kdsaQuery(SB), NOSPLIT|NOFRAME, $0-16
-	MOVD $0, R0         // set function code to 0 (KLMD-Query)
+	MOVD $0, R0         // set function code to 0 (KDSA-Query)
 	MOVD $ret+0(FP), R1 // address of 16-byte return value
-	KDSA R0, R4      // compute digital signature authentication
+	KDSA R0, R4         // compute digital signature authentication
+	RET
+
+// func pccQuery() queryResult
+TEXT ·pccQuery(SB), NOSPLIT|NOFRAME, $0-16
+	MOVD $0, R0         // set function code to 0 (PCC-Query)
+	MOVD $ret+0(FP), R1 // address of 16-byte return value
+	PCC                 // perform cryptographic computation (PCC)
 	RET
 

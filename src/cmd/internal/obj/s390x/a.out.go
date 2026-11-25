@@ -496,6 +496,7 @@ const (
 	AKDSA
 	AKMA
 	AKMCTR
+	APCC
 
 	// vector
 	AVA
